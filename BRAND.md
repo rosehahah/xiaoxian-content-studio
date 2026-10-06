@@ -6,6 +6,7 @@
 
 - “小苋AI圈”“Xiaoxian AI Circle”名称及容易造成官方关联误认的近似名称；
 - 小苋 Logo，包括 `dist/xiaoxian-logo.png`；
+- 小苋企业微信二维码 `assets/xiaoxian-wecom-qr.jpg`；
 - `preview-cover.png` 以及 `dist/issues/**`、`examples/**` 中包含创作者肖像或个人形象的图片；
 - 用户自行导入、生成或保存在 `.local-data/` 中的内容和图片。
 

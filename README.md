@@ -116,3 +116,11 @@ npm test
 Copyright 2026 Xiaoxian AI Circle contributors.
 
 Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
+
+## 联系小苋
+
+项目使用、内容创作或合作交流，可以扫码添加小苋企业微信。
+
+<p align="center">
+  <img src="assets/xiaoxian-wecom-qr.jpg" width="240" alt="小苋企业微信二维码" />
+</p>
