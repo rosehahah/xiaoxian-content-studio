@@ -160,4 +160,7 @@ export async function prepareCreatorSession({platform,profileRoot,onUpdate}){
   await waitForLogin(context,page,platform,config,onUpdate);await onUpdate('logged_in',config.name+'登录状态已确认，可以自动填写草稿。');
 }
 
-export const draftAutomationAvailable=async()=>{try{await fs.access(CHROME);return true;}catch{return false;}};
+export const draftAutomationAvailable=async()=>{
+  if(process.env.STUDIO_DRAFT_DRIVER==='mock')return true;
+  try{await fs.access(CHROME);return true;}catch{return false;}
+};
