@@ -30,6 +30,8 @@ npm start
 
 GitHub 的 `Co-authored-by` 只用于真实共同创作，并使用共同作者愿意公开且与 GitHub 账户关联的邮箱。不要为了增加 Contributors 数量给灵感来源、AI 工具或未参与该 commit 的作者添加共同作者署名。
 
+README 采用 [All Contributors](https://allcontributors.org/en/reference/specification/) 规范，记录代码之外的实际贡献：内容方法归为 `content` 或 `ideas`，产品与视觉方法归为 `design`，直接使用的开源工作流归为 `tool`。这些类别表示本项目采用了相应的公开成果，不表示作者直接提交了本仓库代码；具体来源和使用边界必须同时记录在 `ACKNOWLEDGEMENTS.md`。
+
 ## 贡献许可
 
 根据 Apache-2.0 第 5 条，除非你明确另行说明，主动提交并被项目接收的贡献将按 Apache License 2.0 提供，不附加额外条款。

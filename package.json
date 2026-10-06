@@ -5,7 +5,8 @@
   "scripts": {
     "build": "node build.mjs",
     "start": "node server.mjs",
-    "test": "node --test tests/*.test.mjs"
+    "test": "node --test tests/*.test.mjs",
+    "star-history": "node scripts/render-star-history.mjs"
   },
   "keywords": [],
   "author": "小苋AI圈 (https://github.com/rosehahah)",

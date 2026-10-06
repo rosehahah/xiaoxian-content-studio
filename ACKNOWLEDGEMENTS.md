@@ -29,6 +29,6 @@
 
 ## 关于 GitHub Contributors
 
-GitHub 的贡献者图表应当反映真实提交。只有实际共同创作某个 commit、并提供与 GitHub 账户关联邮箱的人，才应使用 `Co-authored-by`。方法来源通过本文件和研究记录长期保留；如果上游作者未来通过 issue、PR、设计或文档参与本项目，会按照真实贡献方式记录。
+GitHub 的贡献者图表应当反映真实提交。只有实际共同创作某个 commit、并提供与 GitHub 账户关联邮箱的人，才应使用 `Co-authored-by`。方法与工具贡献依据 [All Contributors](https://allcontributors.org/en/reference/specification/) 规范在 README 展示，并明确标注 `ideas`、`content`、`design` 或 `tool` 类型；如果上游作者未来通过 issue、PR、设计或文档继续参与，会追加对应的真实贡献类型。
 
 如果这里的姓名、仓库、许可证或贡献说明不准确，请提交 issue，我们会优先修正。

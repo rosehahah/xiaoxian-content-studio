@@ -2,6 +2,9 @@
 
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-EA3F10.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/Node.js-20%2B-314E3F.svg)](package.json)
+[![CI](https://github.com/rosehahah/xiaoxian-content-studio/actions/workflows/ci.yml/badge.svg)](https://github.com/rosehahah/xiaoxian-content-studio/actions/workflows/ci.yml)
+[![GitHub stars](https://img.shields.io/github/stars/rosehahah/xiaoxian-content-studio?style=flat-square&color=EA3F10)](https://github.com/rosehahah/xiaoxian-content-studio/stargazers)
+[![All Contributors](https://img.shields.io/badge/all_contributors-9-EA3F10.svg?style=flat-square)](#contributors-)
 
 一个本机优先的多平台内容工作台：把选题和文字变成 HTML 图卡，经过人工审核后，写入微信公众号、小红书和抖音草稿。最终发布始终由用户完成。
 
@@ -72,7 +75,41 @@ npm test
 
 “小苋AI圈”名称、Logo、人物照片和个人形象不在 Apache-2.0 授权范围内，详见 [BRAND.md](BRAND.md)。第三方项目、Agent Skills 和运行时依赖的作者与许可证记录在 [ACKNOWLEDGEMENTS.md](ACKNOWLEDGEMENTS.md) 和 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
-GitHub 的 Contributors 图表来自真实 commit。灵感来源不会被伪装成代码作者；我们用可核实的仓库链接和许可证认真致谢。提交代码、设计、文档、测试或研究都欢迎，参见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+本项目采用 [All Contributors](https://allcontributors.org/en/reference/specification/) 规范，同时承认代码、内容方法、设计思路和工具贡献。GitHub 内置 Contributors 图表仍只反映真实 commit；下方表格展示更完整的贡献类型。提交代码、设计、文档、测试或研究都欢迎，参见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+
+## Contributors ✨
+
+感谢这些创作者、维护者和组织为项目提供代码、内容方法、设计思路或工具。每个符号的含义见 [贡献类型说明](https://allcontributors.org/en/reference/emoji-key/)，具体采用范围和许可证见 [ACKNOWLEDGEMENTS.md](ACKNOWLEDGEMENTS.md)。
+
+<!-- ALL-CONTRIBUTORS-LIST:START - Do not remove or modify this section -->
+<table>
+  <tr>
+    <td align="center" valign="top" width="20%"><a href="https://github.com/rosehahah"><img src="https://avatars.githubusercontent.com/u/156568457?s=100&v=4" width="100px;" alt="Rose Han"/><br /><sub><b>Rose Han</b></sub></a><br /><a href="https://allcontributors.org/en/reference/emoji-key/#code" title="Code">💻</a> <a href="https://allcontributors.org/en/reference/emoji-key/#design" title="Design">🎨</a> <a href="https://allcontributors.org/en/reference/emoji-key/#content" title="Content">🖋</a> <a href="https://allcontributors.org/en/reference/emoji-key/#doc" title="Documentation">📖</a> <a href="https://allcontributors.org/en/reference/emoji-key/#maintenance" title="Maintenance">🚧</a></td>
+    <td align="center" valign="top" width="20%"><a href="https://github.com/op7418"><img src="https://avatars.githubusercontent.com/u/13505770?s=100&v=4" width="100px;" alt="歸藏"/><br /><sub><b>歸藏</b></sub></a><br /><a href="https://allcontributors.org/en/reference/emoji-key/#ideas" title="Ideas & Planning">🤔</a> <a href="https://allcontributors.org/en/reference/emoji-key/#design" title="Design">🎨</a> <a href="https://allcontributors.org/en/reference/emoji-key/#content" title="Content">🖋</a></td>
+    <td align="center" valign="top" width="20%"><a href="https://github.com/whitthose"><img src="https://avatars.githubusercontent.com/u/293574225?s=100&v=4" width="100px;" alt="whitthose"/><br /><sub><b>whitthose</b></sub></a><br /><a href="https://allcontributors.org/en/reference/emoji-key/#ideas" title="Ideas & Planning">🤔</a> <a href="https://allcontributors.org/en/reference/emoji-key/#content" title="Content">🖋</a></td>
+    <td align="center" valign="top" width="20%"><a href="https://github.com/adjfks"><img src="https://avatars.githubusercontent.com/u/91618999?s=100&v=4" width="100px;" alt="corner"/><br /><sub><b>corner</b></sub></a><br /><a href="https://allcontributors.org/en/reference/emoji-key/#ideas" title="Ideas & Planning">🤔</a> <a href="https://allcontributors.org/en/reference/emoji-key/#content" title="Content">🖋</a></td>
+    <td align="center" valign="top" width="20%"><a href="https://github.com/classfang"><img src="https://avatars.githubusercontent.com/u/27616248?s=100&v=4" width="100px;" alt="Junki"/><br /><sub><b>Junki</b></sub></a><br /><a href="https://allcontributors.org/en/reference/emoji-key/#ideas" title="Ideas & Planning">🤔</a> <a href="https://allcontributors.org/en/reference/emoji-key/#content" title="Content">🖋</a></td>
+  </tr>
+  <tr>
+    <td align="center" valign="top" width="20%"><a href="https://github.com/aaron-he-zhu"><img src="https://avatars.githubusercontent.com/u/139607425?s=100&v=4" width="100px;" alt="Aaron Zhu"/><br /><sub><b>Aaron Zhu</b></sub></a><br /><a href="https://allcontributors.org/en/reference/emoji-key/#ideas" title="Ideas & Planning">🤔</a> <a href="https://allcontributors.org/en/reference/emoji-key/#content" title="Content">🖋</a></td>
+    <td align="center" valign="top" width="20%"><a href="https://github.com/nashsu"><img src="https://avatars.githubusercontent.com/u/2127280?s=100&v=4" width="100px;" alt="nash_su"/><br /><sub><b>nash_su</b></sub></a><br /><a href="https://allcontributors.org/en/reference/emoji-key/#ideas" title="Ideas & Planning">🤔</a> <a href="https://allcontributors.org/en/reference/emoji-key/#content" title="Content">🖋</a></td>
+    <td align="center" valign="top" width="20%"><a href="https://github.com/anthropics"><img src="https://avatars.githubusercontent.com/u/76263028?s=100&v=4" width="100px;" alt="Anthropic"/><br /><sub><b>Anthropic</b></sub></a><br /><a href="https://allcontributors.org/en/reference/emoji-key/#ideas" title="Ideas & Planning">🤔</a> <a href="https://allcontributors.org/en/reference/emoji-key/#design" title="Design">🎨</a></td>
+    <td align="center" valign="top" width="20%"><a href="https://github.com/nextlevelbuilder"><img src="https://avatars.githubusercontent.com/u/246974152?s=100&v=4" width="100px;" alt="Next Level Builder"/><br /><sub><b>Next Level Builder</b></sub></a><br /><a href="https://allcontributors.org/en/reference/emoji-key/#ideas" title="Ideas & Planning">🤔</a> <a href="https://allcontributors.org/en/reference/emoji-key/#design" title="Design">🎨</a></td>
+  </tr>
+</table>
+
+<!-- ALL-CONTRIBUTORS-LIST:END -->
+
+## Star History
+
+星标曲线从 GitHub 读取后在本机生成，不会把访问令牌交给第三方服务。维护者可运行 `npm run star-history` 刷新明暗两版 SVG。
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/star-history-dark.svg" />
+    <img alt="Xiaoxian Content Studio Star History" src="assets/star-history.svg" />
+  </picture>
+</p>
 
 ## License
 

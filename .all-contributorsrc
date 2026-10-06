@@ -1,0 +1,20 @@
+{
+  "projectName": "xiaoxian-content-studio",
+  "projectOwner": "rosehahah",
+  "repoType": "github",
+  "repoHost": "https://github.com",
+  "files": ["README.md"],
+  "imageSize": 100,
+  "commit": false,
+  "contributors": [
+    {"login":"rosehahah","name":"Rose Han","avatar_url":"https://avatars.githubusercontent.com/u/156568457?v=4","profile":"https://github.com/rosehahah","contributions":["code","design","content","doc","maintenance"]},
+    {"login":"op7418","name":"歸藏","avatar_url":"https://avatars.githubusercontent.com/u/13505770?v=4","profile":"https://github.com/op7418","contributions":["ideas","design","content"]},
+    {"login":"whitthose","name":"whitthose","avatar_url":"https://avatars.githubusercontent.com/u/293574225?v=4","profile":"https://github.com/whitthose","contributions":["ideas","content"]},
+    {"login":"adjfks","name":"corner","avatar_url":"https://avatars.githubusercontent.com/u/91618999?v=4","profile":"https://github.com/adjfks","contributions":["ideas","content"]},
+    {"login":"classfang","name":"Junki","avatar_url":"https://avatars.githubusercontent.com/u/27616248?v=4","profile":"https://github.com/classfang","contributions":["ideas","content"]},
+    {"login":"aaron-he-zhu","name":"Aaron Zhu","avatar_url":"https://avatars.githubusercontent.com/u/139607425?v=4","profile":"https://github.com/aaron-he-zhu","contributions":["ideas","content"]},
+    {"login":"nashsu","name":"nash_su","avatar_url":"https://avatars.githubusercontent.com/u/2127280?v=4","profile":"https://github.com/nashsu","contributions":["ideas","content"]},
+    {"login":"anthropics","name":"Anthropic","avatar_url":"https://avatars.githubusercontent.com/u/76263028?v=4","profile":"https://github.com/anthropics","contributions":["ideas","design"]},
+    {"login":"nextlevelbuilder","name":"Next Level Builder","avatar_url":"https://avatars.githubusercontent.com/u/246974152?v=4","profile":"https://github.com/nextlevelbuilder","contributions":["ideas","design"]}
+  ]
+}
