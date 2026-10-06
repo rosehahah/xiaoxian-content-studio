@@ -1,0 +1,7 @@
+dist/** linguist-generated=true
+dist/vendor.js -whitespace
+icon-ids.mjs linguist-generated=true
+icon-library.mjs linguist-generated=true
+*.png binary
+*.jpg binary
+*.zip binary

@@ -1,0 +1,23 @@
+name: 功能建议
+description: 提议新的工作流、平台适配或设计改进
+title: "[Feature] "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 现在的问题
+      description: 请描述具体使用场景，以及现有流程为什么不够。
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: 期望结果
+    validations:
+      required: true
+  - type: textarea
+    id: boundary
+    attributes:
+      label: 必须保留的边界
+      description: 例如人工审核、只写草稿、不上传凭证。

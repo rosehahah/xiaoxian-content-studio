@@ -1,0 +1,18 @@
+{
+  "repo": "op7418/guizang-social-card-skill",
+  "url": "https://github.com/op7418/guizang-social-card-skill",
+  "stars": 7357,
+  "commit": "cf4b810fac1c73fb65a2bb31d8c9278d82cbc4c5",
+  "license": {
+    "key": "agpl-3.0",
+    "name": "GNU Affero General Public License v3.0",
+    "spdx_id": "AGPL-3.0",
+    "url": "https://api.github.com/licenses/agpl-3.0",
+    "node_id": "MDc6TGljZW5zZTE="
+  },
+  "paths": [
+    "LICENSE",
+    "SKILL.md"
+  ],
+  "checkedAt": "2026-10-06"
+}

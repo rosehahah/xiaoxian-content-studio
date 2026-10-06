@@ -1,0 +1,43 @@
+name: Bug 报告
+description: 报告可复现的问题
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: "请勿提交密码、Cookie、Token、公众号密钥或 `.local-data` 内容。"
+  - type: textarea
+    id: trigger
+    attributes:
+      label: 触发场景
+      description: 你做了什么？使用哪个平台和浏览器？
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望行为
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际行为
+    validations:
+      required: true
+  - type: input
+    id: commit
+    attributes:
+      label: 版本或 commit
+  - type: textarea
+    id: logs
+    attributes:
+      label: 已脱敏日志
+      render: shell
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: 隐私确认
+      options:
+        - label: 我已移除凭证、Cookie、Token 和个人内容
+          required: true

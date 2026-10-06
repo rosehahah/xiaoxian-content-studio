@@ -1,0 +1,14 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it using the metadata below."
+title: "Xiaoxian Content Studio"
+type: software
+authors:
+  - name: "小苋AI圈"
+    alias: "rosehahah"
+    website: "https://github.com/rosehahah"
+repository-code: "https://github.com/rosehahah/xiaoxian-content-studio"
+url: "https://github.com/rosehahah/xiaoxian-content-studio"
+license: Apache-2.0
+version: 1.0.0
+date-released: 2026-10-06
+abstract: "A local-first content, HTML social-card review, and multi-platform draft workspace for WeChat, Xiaohongshu, and Douyin."

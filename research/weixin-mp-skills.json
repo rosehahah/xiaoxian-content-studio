@@ -1,0 +1,16 @@
+{
+  "repo": "classfang/weixin-mp-skills",
+  "url": "https://github.com/classfang/weixin-mp-skills",
+  "stars": 6,
+  "commit": "6f71866de118ab06a5640364fe037cd434eec20c",
+  "license": null,
+  "paths": [
+    "wechat-article-comments/SKILL.md",
+    "wechat-article-image/SKILL.md",
+    "wechat-article-publish/SKILL.md",
+    "wechat-article-workflow/SKILL.md",
+    "wechat-article-write/SKILL.md",
+    "wechat-data-report/SKILL.md"
+  ],
+  "checkedAt": "2026-10-06"
+}

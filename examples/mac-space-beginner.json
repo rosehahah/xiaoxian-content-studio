@@ -1,0 +1,86 @@
+{
+  "id": "mac-space-beginner-02",
+  "schema": 1,
+  "revision": 0,
+  "stage": "content",
+  "createdAt": "2026-10-06T03:34:42.345Z",
+  "updatedAt": "2026-10-06T03:34:42.346Z",
+  "content": {
+    "topic": "电脑满了，先把代码存好",
+    "series": "外行人的 AI 学习笔记",
+    "takeaway": "清理之前，先确认代码已经存好且能恢复。",
+    "cards": [
+      {
+        "kind": "cover",
+        "eyebrow": "给电脑减负 · 一件小事",
+        "title": "项目不敢删？\n先把代码存好。",
+        "body": "先确认代码能找回来，\n再给电脑腾空间。",
+        "note": "今天，先学会这一件小事。"
+      },
+      {
+        "kind": "cabinet",
+        "eyebrow": "先弄懂",
+        "title": "给代码一个\n「存档柜」",
+        "body": "GitHub 能存代码和修改记录。\n它不是整台电脑的备份。",
+        "note": "密钥、数据库、原始素材要另存。"
+      },
+      {
+        "kind": "steps",
+        "eyebrow": "只做三步",
+        "title": "先存好，\n再考虑清理。",
+        "body": "让 AI 检查哪些文件该存\n把代码存到私有仓库\n取回来，确认项目能运行",
+        "note": "只保存成功，还不等于能恢复。"
+      },
+      {
+        "kind": "prompt",
+        "eyebrow": "拿来就能用",
+        "title": "先问 AI，\n别急着删。",
+        "body": "帮我检查这个项目：哪些文件该保存，哪些要单独备份，哪些能重新生成？先列清单和理由，不要删除。",
+        "note": "先看检查结果，再决定下一步。"
+      }
+    ]
+  },
+  "visual": {
+    "theme": "sage",
+    "layout": "airy",
+    "artwork": {
+      "0": "lucide:laptop",
+      "1": "lucide:archive",
+      "2": "lucide:shield-check",
+      "3": "lucide:message-circle"
+    }
+  },
+  "contentApproval": null,
+  "cardApproval": null,
+  "reviewNote": "",
+  "platforms": {
+    "wechat": {
+      "title": "电脑满了，先把代码存好",
+      "body": "用 AI 做项目，电脑空间不够了，旧项目却不敢删。这次先学一件小事：把代码存好，并确认能恢复。\n\nGitHub 可以保存代码和修改记录，但不是整台电脑的备份。密钥、数据库和原始素材要另外保存。\n\n我把思路压成了 4 张图，最后一张可以直接发给 AI，让它先检查、讲理由。清理之前，先取回代码确认项目能运行。不确定的文件，先别删。",
+      "tags": [
+        "AI开发",
+        "GitHub入门"
+      ],
+      "delivery": null
+    },
+    "xiaohongshu": {
+      "title": "项目不敢删？先把代码存好",
+      "body": "电脑快满了，旧项目又不敢删。\n\n我最近在学怎么给代码找个“存档柜”：\n让 AI 检查哪些文件该存 → 保存到 GitHub 私有仓库 → 取回来，确认能运行。\n\n这次只整理了 4 张图。最后一张是检查提示词，可以直接问 AI。\n\n密钥、数据库和原始素材要另存，不确定的先别删。留着，下次空间不够时先检查。",
+      "tags": [
+        "AI开发",
+        "GitHub入门",
+        "小白学习"
+      ],
+      "delivery": null
+    },
+    "douyin": {
+      "title": "项目不敢删？先把代码存好",
+      "body": "电脑快满了，旧项目又不敢删？先学一件小事：给代码找个“存档柜”。让 AI 检查哪些文件该存，放进 GitHub 私有仓库，再取回来确认项目能运行。GitHub 不是整台电脑的备份，密钥、数据库和原始素材要另存。这 4 张图只讲清理前的准备，最后一张可直接问 AI。不确定的先别删。",
+      "tags": [
+        "AI开发",
+        "GitHub入门"
+      ],
+      "delivery": null
+    }
+  }
+}

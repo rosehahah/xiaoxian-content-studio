@@ -1,0 +1,18 @@
+{
+  "repo": "whitthose/redbook-director-skill",
+  "url": "https://github.com/whitthose/redbook-director-skill",
+  "stars": 0,
+  "commit": "03a8674d7723ab71ca05c42c6600310908cb4897",
+  "license": {
+    "key": "mit",
+    "name": "MIT License",
+    "spdx_id": "MIT",
+    "url": "https://api.github.com/licenses/mit",
+    "node_id": "MDc6TGljZW5zZTEz"
+  },
+  "paths": [
+    "LICENSE",
+    "SKILL.md"
+  ],
+  "checkedAt": "2026-10-06"
+}

@@ -1,0 +1,14 @@
+node_modules/
+.local-data/
+.DS_Store
+*.log
+site-deployment.tar.gz
+
+# Personal / brand experiments are kept locally and are not part of the
+# open-source distribution. The curated example and product screenshots stay.
+examples/github-tag-release-20261006/portrait-cover-v*/
+examples/github-tag-release-20261006/xhs-cover-v*/
+examples/github-tag-release-20261006/cover-study-v2/页面检查.png
+examples/github-tag-release-20261006/小苋-Tag与Release-待审核预览.zip
+dist/issues/**/portrait-cover-v*/
+dist/issues/**/cover-study-v*/

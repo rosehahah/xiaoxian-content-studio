@@ -1,0 +1,32 @@
+{
+  "name": "xiaoxian-studio",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "start": "node server.mjs",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "keywords": [],
+  "author": "小苋AI圈 (https://github.com/rosehahah)",
+  "license": "Apache-2.0",
+  "description": "面向微信公众号、小红书和抖音的本机内容创作、图卡审核与草稿工作台",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rosehahah/xiaoxian-content-studio.git"
+  },
+  "homepage": "https://github.com/rosehahah/xiaoxian-content-studio#readme",
+  "bugs": {
+    "url": "https://github.com/rosehahah/xiaoxian-content-studio/issues"
+  },
+  "dependencies": {
+    "@tabler/icons": "3.49.0",
+    "html-to-image": "^1.11.13",
+    "jszip": "^3.10.2",
+    "lucide-static": "1.52.0",
+    "playwright-core": "^1.63.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
+  }
+}
