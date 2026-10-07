@@ -8,6 +8,7 @@ import {cardKey} from '../model.mjs';
 let server,temp,p;
 const base='http://127.0.0.1:4399';
 async function req(route,body,method='POST',extra={}){return fetch(base+route,{method,headers:{...(body?{'Content-Type':'application/json'}:{}),...extra},body:body?JSON.stringify(body):undefined});}
+async function waitForJob(id,status){const deadline=Date.now()+5000;let job;while(Date.now()<deadline){job=(await (await req('/api/draft-jobs/'+id,null,'GET')).json()).job;if(job.status===status)return job;if(job.status==='error')throw Error(job.message);await new Promise(resolve=>setTimeout(resolve,20));}assert.fail('任务未完成：'+JSON.stringify(job));}
 before(async()=>{temp=await mkdtemp(path.join(os.tmpdir(),'xiaoxian-test-'));server=spawn(process.execPath,['server.mjs'],{cwd:new URL('..',import.meta.url),env:{...process.env,STUDIO_PORT:'4399',STUDIO_DATA_DIR:temp,STUDIO_DRAFT_DRIVER:'mock'},stdio:['ignore','pipe','pipe']});await new Promise((resolve,reject)=>{server.stdout.once('data',resolve);server.once('error',reject);server.once('exit',()=>reject(new Error('server stopped')));});p=(await (await req('/api/projects',null,'GET')).json()).projects[0];});
 after(async()=>{server?.kill();await new Promise(r=>server.once('exit',r));await rm(temp,{recursive:true,force:true});});
 test('未审核不能调用草稿接口，跨站请求被拒绝',async()=>{const r=await req('/api/projects/'+p.id+'/draft',{revision:p.revision,cardFingerprint:cardKey(p),images:[]});assert.equal(r.status,400);assert.match((await r.json()).error,/审核/);const cross=await req('/api/projects/'+p.id,{...p},'PUT',{Origin:'https://external.example'});assert.equal(cross.status,403);});
@@ -16,13 +17,12 @@ test('不存在正式发布端点，也不会让网页提交凭证',async()=>{co
 test('自动草稿任务只接受审核版本，并保存可核对状态',async()=>{
   let r=await req('/api/projects/'+p.id+'/content-approve',{revision:p.revision});p=(await r.json()).project;
   r=await req('/api/projects/'+p.id+'/cards-approve',{revision:p.revision,cardFingerprint:cardKey(p),viewedCount:p.content.cards.length});p=(await r.json()).project;
-  r=await req('/api/platform-sessions/xiaohongshu/check',{});assert.equal(r.status,202);const loginStarted=await r.json();let loginJob;
-  for(let i=0;i<20;i++){loginJob=(await (await req('/api/draft-jobs/'+loginStarted.job.id,null,'GET')).json()).job;if(loginJob.status==='logged_in')break;await new Promise(resolve=>setTimeout(resolve,20));}
+  r=await req('/api/platform-sessions/xiaohongshu/check',{});assert.equal(r.status,202);const loginStarted=await r.json();const loginJob=await waitForJob(loginStarted.job.id,'logged_in');
   assert.equal(loginJob.status,'logged_in');const health=await (await req('/api/health',null,'GET')).json();assert.equal(health.platformSessions.xiaohongshu.status,'logged_in');
   const png=Buffer.alloc(24);Buffer.from('89504e470d0a1a0a','hex').copy(png);png.writeUInt32BE(1080,16);png.writeUInt32BE(1440,20);
   r=await req('/api/projects/'+p.id+'/draft-job',{revision:p.revision,platform:'xiaohongshu',cardFingerprint:cardKey(p),images:p.content.cards.map(()=>`data:image/png;base64,${png.toString('base64')}`)});
   assert.equal(r.status,202);const started=await r.json();assert.equal(started.job.platform,'xiaohongshu');assert.equal('imageFiles' in started.job,false);
-  let job;for(let i=0;i<20;i++){job=(await (await req('/api/draft-jobs/'+started.job.id,null,'GET')).json()).job;if(job.status==='draft')break;await new Promise(resolve=>setTimeout(resolve,20));}
+  const job=await waitForJob(started.job.id,'draft');
   assert.equal(job.status,'draft');p=(await (await req('/api/projects',null,'GET')).json()).projects.find(x=>x.id===p.id);assert.equal(p.platforms.xiaohongshu.delivery.status,'draft');
 });
 

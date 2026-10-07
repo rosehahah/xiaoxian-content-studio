@@ -94,7 +94,7 @@ async function creatorDraft(p,body){
   const imagePaths=await imageFiles(p,body),copy=p.platforms[body.platform];
   const job={id:randomUUID(),projectId:p.id,platform:body.platform,status:'queued',message:'等待打开创作中心',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),cardFingerprint:cardKey(p),copyFingerprint:fingerprint({title:copy.title,body:copy.body,tags:copy.tags}),imageCount:imagePaths.length,imageFiles:imagePaths};
   copy.delivery={status:'opening',jobId:job.id,at:job.createdAt,cardFingerprint:job.cardFingerprint,fingerprint:job.copyFingerprint,by:'automation'};stamp(p);await persist();await saveJob(job);busy.add(p.id);
-  runCreatorDraft({platform:job.platform,title:copy.title,body:copy.body,tags:copy.tags,imageFiles:imagePaths,profileRoot,onUpdate:async(status,message)=>{await updateJob(job,status,message);copy.delivery={...copy.delivery,status,updatedAt:job.updatedAt,message};await persist();}}).then(async()=>{
+  runCreatorDraft({platform:job.platform,title:copy.title,body:copy.body,tags:copy.tags,imageFiles:imagePaths,profileRoot,onUpdate:async(status,message)=>{copy.delivery={...copy.delivery,status,updatedAt:new Date().toISOString(),message};await updateJob(job,status,message);await persist();}}).then(async()=>{
     if(job.status==='draft')copy.delivery={...copy.delivery,status:'draft',verifiedAt:new Date().toISOString()};
     else if(!['filled','needs_attention'].includes(job.status))await updateJob(job,'filled','内容已填入创作中心，请在浏览器中核对并保存草稿。');
     stamp(p);await persist();
@@ -106,7 +106,7 @@ async function checkPlatformSession(platform){
   if(!await draftAutomationAvailable())throw new Error('未找到可用的 Google Chrome');
   const job={id:randomUUID(),type:'session-check',platform,status:'queued',message:'等待检查登录状态',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};await saveJob(job);
   platformSessions[platform]={status:'opening',jobId:job.id,checkedAt:null};
-  prepareCreatorSession({platform,profileRoot,onUpdate:async(status,message)=>{await updateJob(job,status,message);platformSessions[platform]={status,jobId:job.id,checkedAt:status==='logged_in'?new Date().toISOString():null};}}).catch(async error=>{await updateJob(job,'error',error.message||'登录状态检查未完成');platformSessions[platform]={status:'error',jobId:job.id,message:job.message,checkedAt:null};});
+  prepareCreatorSession({platform,profileRoot,onUpdate:async(status,message)=>{platformSessions[platform]={status,jobId:job.id,checkedAt:status==='logged_in'?new Date().toISOString():null};await updateJob(job,status,message);}}).catch(async error=>{await updateJob(job,'error',error.message||'登录状态检查未完成');platformSessions[platform]={status:'error',jobId:job.id,message:job.message,checkedAt:null};});
   return publicJob(job);
 }
 const server=http.createServer(async(req,res)=>{
