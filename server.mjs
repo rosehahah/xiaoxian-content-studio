@@ -1,3 +1,4 @@
+import {coverReference,COVER_ATLAS} from './cover-library.mjs';
 import {creativeOf,creationErrors,coverErrors,creativeInputKey,coverPrompt,imageDataValid} from './creative.mjs';
 import http from 'node:http';
 import fs from 'node:fs/promises';
@@ -130,7 +131,7 @@ const server=http.createServer(async(req,res)=>{
         for(const copy of Object.values(p.platforms)){copy.delivery=null;copy.history=[];}
         projects.unshift(p);await persist();json(res,201,{project:p});return;
       }
-      const m=route.match(/^\/api\/projects\/([a-zA-Z0-9_-]{1,80})(?:\/(creative-input|cover-import|content-approve|cards-approve|draft|draft-job|manual-draft))?$/);
+      const m=route.match(/^\/api\/projects\/([a-zA-Z0-9_-]{1,80})(?:\/(creative-input|cover-import|cover-select|content-approve|cards-approve|draft|draft-job|manual-draft))?$/);
       if(!m){json(res,404,{error:'接口不存在'});return;}
       const p=projects.find(x=>x.id===m[1]);if(!p){json(res,404,{error:'项目不存在'});return;}
       if(req.method==='GET'&&m[2]==='creative-input'){
@@ -138,15 +139,25 @@ const server=http.createServer(async(req,res)=>{
         const creative=creativeOf(p);if(!creative)throw new Error('请先选择封面方式');
         let portraitPath=null;
         if(creative.portrait){const dir=path.join(local,'creative-inputs',p.id);await fs.mkdir(dir,{recursive:true});const mime=creative.portrait.data.split(';')[0],ext=mime.endsWith('jpeg')?'jpg':mime.endsWith('webp')?'webp':'png';portraitPath=path.join(dir,'portrait.'+ext);await fs.writeFile(portraitPath,Buffer.from(creative.portrait.data.split(',')[1],'base64'));}
-        json(res,200,{mode:creative.mode,style:creative.style,portraitPath,prompt:coverPrompt(p),inputFingerprint:creativeInputKey(p),revision:p.revision,importEndpoint:origin+'/api/projects/'+p.id+'/cover-import'});return;
+        let referencePath=null;
+        if(creative.referenceId==='custom'&&creative.reference){const dir=path.join(local,'creative-inputs',p.id);await fs.mkdir(dir,{recursive:true});const ext=creative.reference.data.startsWith('data:image/jpeg')?'jpg':creative.reference.data.startsWith('data:image/webp')?'webp':'png';referencePath=path.join(dir,'composition.'+ext);await fs.writeFile(referencePath,Buffer.from(creative.reference.data.split(',')[1],'base64'));}
+        else if(coverReference(creative.referenceId))referencePath=path.join(dist,COVER_ATLAS);
+        json(res,200,{mode:creative.mode,portraitPath:creative.mode==='portrait'?portraitPath:null,referencePath,reference:coverReference(creative.referenceId)||null,prompt:coverPrompt(p),inputFingerprint:creativeInputKey(p),revision:p.revision,importEndpoint:origin+'/api/projects/'+p.id+'/cover-import',selectionEndpoint:origin+'/api/projects/'+p.id+'/cover-select'});return;
       }
       if(busy.has(p.id)){json(res,409,{error:'正在填写草稿，请等待完成后再编辑'});return;}
       const body=await readBody(req);requireRevision(p,body);
       if(req.method==='POST'&&m[2]==='cover-import'){
-        if(creationErrors(p).length||creativeOf(p)?.mode!=='portrait')throw new Error('请先选择真人封面并上传本人照片');
+        if(creationErrors(p).length)throw new Error(creationErrors(p).join('；'));
         if(body.inputFingerprint!==creativeInputKey(p))throw new Error('生成输入已变化，请使用当前版本重新生成');
         if(typeof body.name!=='string'||body.name.length>300||!imageDataValid(body.data))throw new Error('生成图片格式错误');
-        p.visual.creative.result={name:body.name,data:body.data,inputFingerprint:body.inputFingerprint};invalidateVisual(p);stamp(p);await persist();json(res,200,{project:p});return;
+        const c=p.visual.creative,next=structuredClone(c),candidate={id:randomUUID(),name:body.name,data:body.data,inputFingerprint:body.inputFingerprint,createdAt:new Date().toISOString()};
+        if(c.workflow===2){next.candidates.push(candidate);validateProject({...p,visual:{...p.visual,creative:next}});}else next.result=candidate;
+        p.visual.creative=next;invalidateVisual(p);stamp(p);await persist();json(res,200,{project:p,candidateId:candidate.id});return;
+      }
+      if(req.method==='POST'&&m[2]==='cover-select'){
+        const c=creativeOf(p),candidate=c?.candidates?.find(x=>x.id===body.candidateId);
+        if(!candidate||creationErrors(p).length||candidate.inputFingerprint!==creativeInputKey(p))throw new Error('候选不存在或输入已变化，请重新生成');
+        c.selectedCandidateId=candidate.id;c.result={...candidate};invalidateVisual(p);stamp(p);await persist();json(res,200,{project:p});return;
       }
       if(req.method==='PUT'&&!m[2]){
         const next=validateProject(body);const contentChanged=contentKey(p)!==contentKey(next),visualChanged=cardKey(p)!==cardKey(next);

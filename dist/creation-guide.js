@@ -1,6 +1,6 @@
 export const SOURCES=[
   {name:'归藏 Social Card',url:'https://github.com/op7418/guizang-social-card-skill',use:'HTML 图卡、观点拆页、文字压缩与视觉层级',decision:'吸收排版方法；不设固定页数或信息密度；按内容选择层级并保持品牌识别。'},
-  {name:'Redbook Director',url:'https://github.com/whitthose/redbook-director-skill',use:'封面抓注意力，内页给理由，结尾给动作',decision:'参考页面节奏；页数随内容决定；先选真人或文字封面；真人上传本人照片后直接用内置图片工具，文字与教程内页用 HTML / SVG。'},
+  {name:'Redbook Director',url:'https://github.com/whitthose/redbook-director-skill',use:'封面抓注意力，内页给理由，结尾给动作',decision:'参考页面节奏；页数随内容决定；封面先看参考，再准备素材，生成候选后由用户挑选；身份与构图分离，内页用HTML/SVG独立设计。'},
   {name:'Write Xiaohongshu',url:'https://github.com/adjfks/corner-skills/tree/main/skills/write-xiaohongshu',use:'具体场景、朋友式口吻、短段落和字符计数',decision:'参考文案方法；不复制个人经历，也不接入其发布步骤。'},
   {name:'Weixin MP Skills',url:'https://github.com/classfang/weixin-mp-skills/tree/main/wechat-article-write',use:'先解释术语，用例子承接抽象概念',decision:'参考易读性方法；公众号继续使用本机多图草稿接口。'},
   {name:'Short Video Scripter',url:'https://github.com/aaron-he-zhu/aaron-marketing-skills/tree/main/social/craft/short-video-scripter',use:'开场吸引注意、接住承诺、给实用内容',decision:'把节奏用于抖音贴图；视频号先保存脚本方法，不增加第四个发布端。'}

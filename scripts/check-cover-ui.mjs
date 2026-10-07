@@ -1,0 +1,48 @@
+import {chromium} from 'playwright-core';
+import {fileURLToPath} from 'node:url';
+import {seedProject,contentKey} from '../model.mjs';
+import {creativeInputKey} from '../creative.mjs';
+import os from 'node:os';
+import path from 'node:path';
+import {mkdtemp,writeFile,rm,mkdir} from 'node:fs/promises';
+import {spawn} from 'node:child_process';
+import assert from 'node:assert/strict';
+const outputDir=path.join(os.tmpdir(),'xiaoxian-cover-ui');await mkdir(outputDir,{recursive:true});
+const root=fileURLToPath(new URL('..',import.meta.url)),dir=await mkdtemp(path.join(os.tmpdir(),'cover-ui-qa-'));
+const png='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a9N8AAAAASUVORK5CYII=';
+const project=seedProject();project.id='isolated-cover-qa';project.content.topic='换台电脑，项目怎么迁移？';project.visual.creative={mode:'portrait',style:'vivid',portrait:{name:'test-pixel.png',data:png},result:null};project.visual.creative.result={name:'previous.png',data:png,inputFingerprint:creativeInputKey(project)};project.contentApproval={fingerprint:contentKey(project),by:'isolated-test'};
+await writeFile(dir+'/projects.json',JSON.stringify([project]));
+const server=spawn(process.execPath,[root+'/server.mjs'],{cwd:root,env:{...process.env,STUDIO_PORT:'4412',STUDIO_DATA_DIR:dir},stdio:['ignore','pipe','pipe']});
+await new Promise((resolve,reject)=>{server.stdout.once('data',resolve);server.once('error',reject);server.once('exit',()=>reject(Error('QA server exited')));});
+let browser;const errors=[];
+try{
+ browser=await chromium.launch({executablePath:process.env.STUDIO_CHROME||'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',headless:true});
+ const page=await browser.newPage({viewport:{width:1440,height:1050}});page.on('pageerror',e=>errors.push(e.message));
+ await page.goto('http://localhost:4412/?project=isolated-cover-qa&stage=cover');await page.getByRole('heading',{name:'01 · 哪张参考更接近你的想法？'}).waitFor();
+ assert.equal(await page.locator('.cover-reference').count(),9);assert.equal(await page.locator('input#new-cover-mode').count(),0);
+ assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+ await page.locator('[data-action="cover-reference-zoom"][data-reference="headline"]').click();await page.locator('.cover-reference-zoom').waitFor();await page.locator('[data-dismiss]').last().click();
+ await page.screenshot({path:path.join(outputDir,'cover-studio-desktop.png'),fullPage:true});
+ await page.locator('[data-action="cover-reference"][data-reference="headline"]').click();await page.locator('.cover-reference.chosen').waitFor();
+ await page.locator('#cover-headline').fill('换台电脑\n项目怎么搬？');await page.locator('#cover-points').fill('备份代码\n保存草稿\n新电脑检查');await page.locator('#cover-benefit').fill('把现有项目接着做');await page.locator('#cover-direction').fill('保留自然背景，人物与侧边清单配合，不沿用旧封面动作。');await page.locator('#cover-direction').blur();
+ await page.waitForFunction(()=>document.querySelector('[data-save-label]')?.textContent==='已保存');
+ let q=(await (await fetch('http://localhost:4412/api/projects')).json()).projects[0];assert.deepEqual(q.content,project.content);assert.deepEqual(q.contentApproval,project.contentApproval);assert.equal(q.visual.creative.workflow,2);assert.ok(q.visual.creative.portrait);assert.equal(q.visual.creative.candidates.length,1);
+ const input=await (await fetch('http://localhost:4412/api/projects/'+q.id+'/creative-input')).json();assert.ok(input.portraitPath!==input.referencePath);assert.ok(input.prompt.includes('备份代码'));
+ await page.locator('[data-action="cover-reference"][data-reference="objects"]').click();await page.locator('[data-action="cover-mode"][data-mode="text"]').waitFor();assert.equal(await page.locator('#portrait-photo').count(),0);
+ assert.ok(await page.locator('[data-action="cover-task"]').isEnabled());
+ // UI import tested with a reference asset in isolated data, not a user's cover candidate.
+ await page.locator('#cover-result').setInputFiles(root+'/dist/cover-references/social-atlas.png');await page.waitForFunction(()=>document.querySelectorAll('.cover-candidate').length===2);
+ q=(await (await fetch('http://localhost:4412/api/projects')).json()).projects[0];assert.equal(q.visual.creative.selectedCandidateId,null);const candidate=q.visual.creative.candidates[1];
+ await page.locator('[data-action="cover-candidate-zoom"][data-candidate="'+candidate.id+'"]').click();await page.locator('.cover-full').waitFor();await page.locator('[data-dismiss]').last().click();
+ await page.locator('[data-action="cover-select"][data-candidate="'+candidate.id+'"]').click();await page.waitForFunction(()=>document.querySelector('.cover-candidate.chosen'));
+ await page.reload();await page.locator('.cover-candidate.chosen').waitFor();
+ q=(await (await fetch('http://localhost:4412/api/projects')).json()).projects[0];assert.equal(q.visual.creative.selectedCandidateId,candidate.id);assert.equal(q.cardApproval,null);assert.deepEqual(q.contentApproval,project.contentApproval);
+ await page.locator('[data-stage="design"]').first().click();await page.locator('[data-action="creative-style"][data-style="minimal"]').click();await page.waitForFunction(()=>document.querySelector('[data-save-label]')?.textContent==='已保存');
+ await page.locator('[data-stage="cover"]').first().click();assert.equal(await page.locator('.cover-candidate.chosen').count(),1);
+ const mobile=await browser.newPage({viewport:{width:430,height:932}});mobile.on('pageerror',e=>errors.push(e.message));await mobile.goto('http://localhost:4412/?project=isolated-cover-qa&stage=cover');await mobile.locator('.cover-reference').first().waitFor();
+ const widths=await mobile.evaluate(()=>({viewport:innerWidth,page:document.documentElement.scrollWidth}));assert.ok(widths.page<=widths.viewport,JSON.stringify(widths));await mobile.screenshot({path:path.join(outputDir,'cover-studio-mobile.png'),fullPage:true});await mobile.screenshot({path:path.join(outputDir,'cover-studio-mobile-viewport.png')});
+ await page.locator('[data-action="new"]').first().click();assert.equal(await page.locator('#new-cover-mode').count(),0);await page.locator('#new-topic').fill('测试新建，不定封面');await page.locator('#create-project').click();await page.locator('[data-stage="cover"]').first().click();assert.equal(await page.locator('.cover-reference').count(),9);
+ await page.locator('[data-action="cover-mode"][data-mode="portrait"]').click();assert.ok(await page.locator('[data-action="cover-task"]').isDisabled());assert.equal(await page.locator('#portrait-photo').count(),1);
+ assert.deepEqual(errors,[]);
+ console.log(JSON.stringify({passed:true,referenceCount:9,mobile:widths,isolatedDataOnly:true,errors,screenshots:[path.join(outputDir,'cover-studio-desktop.png'),path.join(outputDir,'cover-studio-mobile.png')],isolatedData:dir},null,2));
+}finally{await browser?.close();server.kill('SIGINT');await Promise.race([new Promise(r=>server.once('exit',r)),new Promise(r=>setTimeout(r,3000))]);await rm(dir,{recursive:true,force:true});}

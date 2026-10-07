@@ -1,4 +1,4 @@
-import {validateCreative,creationErrors} from './creative.mjs';
+import {validateCreative} from './creative.mjs';
 import {ICON_IDS} from './icon-ids.mjs';
 export const SCHEMA = 1;
 // Resource ceilings protect the local editor; they are not editorial targets.
@@ -31,7 +31,7 @@ export function validatePlatform(p, key) {
   return {errors,warnings,textLength:count(text),titleLength:count(copy.title),tagCount:copy.tags.length};
 }
 export function validateContent(p) {
-  const errors=[...creationErrors(p)];
+  const errors=[];
   if (!p.content.topic.trim()) errors.push('请填写选题');
   if (!p.content.takeaway.trim()) errors.push('请说明核心判断或读者收益');
   if (!p.content.cards.length || p.content.cards.length>MAX_CARDS) errors.push('请准备至少一张图卡；本机最多保存 '+MAX_CARDS+' 张');

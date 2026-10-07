@@ -28,7 +28,7 @@ test('自动草稿任务只接受审核版本，并保存可核对状态',async(
 
 test('真人生图输入缺照片时拒绝，导入结果必须匹配当前版本',async()=>{
  const {seedProject}=await import('../model.mjs');const {newCreative}=await import('../creative.mjs');
- let q=seedProject();q.id='portrait-flow';q.visual.creative=newCreative('portrait');
+ let q=seedProject();q.id='portrait-flow';q.visual.creative={mode:'portrait',style:'vivid',portrait:null,result:null};
  let r=await req('/api/projects',q);assert.equal(r.status,201);q=(await r.json()).project;
  r=await req('/api/projects/'+q.id+'/creative-input',null,'GET');assert.equal(r.status,400);assert.match((await r.json()).error,/上传/);
  q.visual.creative.portrait={name:'person.png',data:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a9N8AAAAASUVORK5CYII='};
@@ -42,4 +42,24 @@ test('真人生图输入缺照片时拒绝，导入结果必须匹配当前版�
  r=await req('/api/projects/'+q.id+'/cover-import',body);assert.equal(r.status,200);q=(await r.json()).project;assert.equal(q.cardApproval,null);assert.equal(q.visual.creative.result.inputFingerprint,input.inputFingerprint);
  q.visual.creative.style='minimal';r=await req('/api/projects/'+q.id,q,'PUT');q=(await r.json()).project;
  r=await req('/api/projects/'+q.id+'/cover-import',{...body,revision:q.revision});assert.equal(r.status,400);
+});
+
+test('新封面流程：正文独立确认，多候选导入后须显式选择，版本与身份参考分开',async()=>{
+ const {seedProject,contentKey}=await import('../model.mjs');const {newCreative,currentCover,creativeInputKey}=await import('../creative.mjs');
+ let q=seedProject();q.id='cover-candidates';q.visual.creative=newCreative();let r=await req('/api/projects',q);q=(await r.json()).project;
+ r=await req('/api/projects/'+q.id+'/content-approve',{revision:q.revision});assert.equal(r.status,200);q=(await r.json()).project;const textKey=contentKey(q);
+ const png='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a9N8AAAAASUVORK5CYII=';
+ Object.assign(q.visual.creative,{mode:'portrait',referenceId:'custom',portrait:{name:'person.png',data:png},reference:{name:'layout.png',data:png}});
+ r=await req('/api/projects/'+q.id,q,'PUT');q=(await r.json()).project;assert.equal(contentKey(q),textKey);assert.ok(q.contentApproval);
+ const input=await (await req('/api/projects/'+q.id+'/creative-input',null,'GET')).json();assert.notEqual(input.portraitPath,input.referencePath);assert.ok(input.referencePath.startsWith(temp));assert.ok(input.selectionEndpoint.endsWith('/cover-select'));
+ const ids=[];for(let i=0;i<3;i++){r=await req('/api/projects/'+q.id+'/cover-import',{revision:q.revision,inputFingerprint:input.inputFingerprint,name:'candidate-'+i+'.png',data:png});assert.equal(r.status,200);const d=await r.json();q=d.project;ids.push(d.candidateId);assert.equal(currentCover(q),null);assert.equal(q.cardApproval,null);assert.ok(q.contentApproval);}
+ r=await req('/api/projects/'+q.id+'/cover-import',{revision:input.revision,inputFingerprint:input.inputFingerprint,name:'stale.png',data:png});assert.equal(r.status,409);
+ r=await req('/api/projects/'+q.id+'/cover-select',{revision:q.revision,candidateId:'missing'});assert.equal(r.status,400);
+ r=await req('/api/projects/'+q.id+'/cover-select',{revision:q.revision,candidateId:ids[1]});assert.equal(r.status,200);q=(await r.json()).project;assert.equal(q.visual.creative.selectedCandidateId,ids[1]);assert.ok(currentCover(q));assert.equal(q.cardApproval,null);
+ q.visual.creative.style='minimal';r=await req('/api/projects/'+q.id,q,'PUT');q=(await r.json()).project;assert.ok(currentCover(q));assert.ok(q.contentApproval);
+ q.visual.creative.coverDirection='new composition';r=await req('/api/projects/'+q.id,q,'PUT');q=(await r.json()).project;assert.equal(currentCover(q),null);
+ r=await req('/api/projects/'+q.id+'/cover-select',{revision:q.revision,candidateId:ids[0]});assert.equal(r.status,400);
+ Object.assign(q.visual.creative,{mode:'text',referenceId:'objects'});r=await req('/api/projects/'+q.id,q,'PUT');q=(await r.json()).project;
+ const input2=await (await req('/api/projects/'+q.id+'/creative-input',null,'GET')).json();assert.equal(input2.portraitPath,null);assert.ok(input2.referencePath.endsWith('social-atlas.png'));assert.match(input2.prompt,/Do not include any person/);
+ r=await req('/api/projects/'+q.id+'/cover-import',{revision:q.revision,inputFingerprint:input2.inputFingerprint,name:'objects.png',data:png});assert.equal(r.status,200);q=(await r.json()).project;assert.equal(q.visual.creative.candidates.length,4);assert.notEqual(creativeInputKey(q),input.inputFingerprint);
 });
