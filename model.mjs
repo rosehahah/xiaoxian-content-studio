@@ -1,3 +1,4 @@
+import {validateCreative,creationErrors} from './creative.mjs';
 import {ICON_IDS} from './icon-ids.mjs';
 export const SCHEMA = 1;
 // Resource ceilings protect the local editor; they are not editorial targets.
@@ -30,7 +31,7 @@ export function validatePlatform(p, key) {
   return {errors,warnings,textLength:count(text),titleLength:count(copy.title),tagCount:copy.tags.length};
 }
 export function validateContent(p) {
-  const errors=[];
+  const errors=[...creationErrors(p)];
   if (!p.content.topic.trim()) errors.push('请填写选题');
   if (!p.content.takeaway.trim()) errors.push('请说明核心判断或读者收益');
   if (!p.content.cards.length || p.content.cards.length>MAX_CARDS) errors.push('请准备至少一张图卡；本机最多保存 '+MAX_CARDS+' 张');
@@ -77,6 +78,7 @@ export function validateProject(p) {
     if(!b||['audience','benefit','direction'].some(k=>typeof b[k]!=='string'||b[k].length>12000)||!Array.isArray(b.references)||b.references.length>4)throw new Error('创作简报格式错误');
     for(const ref of b.references)if(!ref||typeof ref.name!=='string'||ref.name.length>300||typeof ref.note!=='string'||ref.note.length>3000||typeof ref.data!=='string'||ref.data.length>2800000||!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+=*$/.test(ref.data))throw new Error('参考图格式错误，仅接受本地 PNG、JPEG 或 WebP');
   }
+  validateCreative(p);
   if(!p.visual || !['sage','ink','rose'].includes(p.visual.theme) || !['airy','compact'].includes(p.visual.layout)) throw new Error('视觉配置错误');
   if(p.visual.artwork!==undefined){
     if(!p.visual.artwork||typeof p.visual.artwork!=='object'||Array.isArray(p.visual.artwork))throw new Error('素材配置错误');

@@ -12,3 +12,7 @@ examples/github-tag-release-20261006/cover-study-v2/页面检查.png
 examples/github-tag-release-20261006/小苋-Tag与Release-待审核预览.zip
 dist/issues/**/portrait-cover-v*/
 dist/issues/**/cover-study-v*/
+
+# Unreviewed local content drafts; keep creator inputs and iterations local.
+examples/vibecoding-move-computer-20261007/
+dist/issues/vibecoding-move-computer-20261007/

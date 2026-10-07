@@ -25,3 +25,21 @@ test('自动草稿任务只接受审核版本，并保存可核对状态',async(
   let job;for(let i=0;i<20;i++){job=(await (await req('/api/draft-jobs/'+started.job.id,null,'GET')).json()).job;if(job.status==='draft')break;await new Promise(resolve=>setTimeout(resolve,20));}
   assert.equal(job.status,'draft');p=(await (await req('/api/projects',null,'GET')).json()).projects.find(x=>x.id===p.id);assert.equal(p.platforms.xiaohongshu.delivery.status,'draft');
 });
+
+test('真人生图输入缺照片时拒绝，导入结果必须匹配当前版本',async()=>{
+ const {seedProject}=await import('../model.mjs');const {newCreative}=await import('../creative.mjs');
+ let q=seedProject();q.id='portrait-flow';q.visual.creative=newCreative('portrait');
+ let r=await req('/api/projects',q);assert.equal(r.status,201);q=(await r.json()).project;
+ r=await req('/api/projects/'+q.id+'/creative-input',null,'GET');assert.equal(r.status,400);assert.match((await r.json()).error,/上传/);
+ q.visual.creative.portrait={name:'person.png',data:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a9N8AAAAASUVORK5CYII='};
+ r=await req('/api/projects/'+q.id,q,'PUT');assert.equal(r.status,200);q=(await r.json()).project;
+ r=await req('/api/projects/'+q.id+'/content-approve',{revision:q.revision});assert.equal(r.status,200);q=(await r.json()).project;
+ r=await req('/api/projects/'+q.id+'/cards-approve',{revision:q.revision,cardFingerprint:cardKey(q),viewedCount:q.content.cards.length});assert.equal(r.status,400);assert.match((await r.json()).error,/先生成/);
+ const input=await (await req('/api/projects/'+q.id+'/creative-input',null,'GET')).json();assert.ok(input.portraitPath.startsWith(temp));assert.match(input.prompt,/identity-preserve/);
+ const {readFile}=await import('node:fs/promises');assert.ok((await readFile(input.portraitPath)).length>24);
+ const body={revision:q.revision,name:'generated.png',data:q.visual.creative.portrait.data,inputFingerprint:input.inputFingerprint};
+ r=await req('/api/projects/'+q.id+'/cover-import',{...body,inputFingerprint:'deadbeef'});assert.equal(r.status,400);
+ r=await req('/api/projects/'+q.id+'/cover-import',body);assert.equal(r.status,200);q=(await r.json()).project;assert.equal(q.cardApproval,null);assert.equal(q.visual.creative.result.inputFingerprint,input.inputFingerprint);
+ q.visual.creative.style='minimal';r=await req('/api/projects/'+q.id,q,'PUT');q=(await r.json()).project;
+ r=await req('/api/projects/'+q.id+'/cover-import',{...body,revision:q.revision});assert.equal(r.status,400);
+});
