@@ -25,7 +25,7 @@
 
 ## 图标、渲染与自动化
 
-感谢 [Lucide](https://github.com/lucide-icons/lucide)、[Tabler Icons](https://github.com/tabler/tabler-icons)、[html-to-image](https://github.com/bubkoo/html-to-image)、[JSZip](https://github.com/Stuk/jszip)、[Playwright](https://github.com/microsoft/playwright) 和 [esbuild](https://github.com/evanw/esbuild)。版本和许可证见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+感谢 [Lucide](https://github.com/lucide-icons/lucide)、[Tabler Icons](https://github.com/tabler/tabler-icons)、[html-to-image](https://github.com/bubkoo/html-to-image)、[JSZip](https://github.com/Stuk/jszip) 和 [esbuild](https://github.com/evanw/esbuild)。浏览器操作使用本机 Ego Lite（ego-browser）。版本和许可证见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
 ## 关于 GitHub Contributors
 

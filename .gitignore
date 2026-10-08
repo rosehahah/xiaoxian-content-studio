@@ -16,3 +16,15 @@ dist/issues/**/cover-study-v*/
 # Unreviewed local content drafts; keep creator inputs and iterations local.
 examples/vibecoding-move-computer-20261007/
 dist/issues/vibecoding-move-computer-20261007/
+
+# Rebuilt from source and pinned npm dependencies by npm run build.
+icon-ids.mjs
+dist/icon-data.mjs
+dist/icon-ids.mjs
+dist/icon-library.mjs
+dist/vendor.js
+dist/model.mjs
+dist/planning.mjs
+dist/creative.mjs
+dist/cover-library.mjs
+dist/licenses/

@@ -1,3 +1,4 @@
+import {defaultPreferences,validatePreferences,planningOf,planningInputKey,planningTask,importPlans,applyPlan} from './planning.mjs';
 import {coverReference,COVER_ATLAS} from './cover-library.mjs';
 import {creativeOf,creationErrors,coverErrors,creativeInputKey,coverPrompt,imageDataValid} from './creative.mjs';
 import http from 'node:http';
@@ -14,9 +15,11 @@ const run=promisify(execFile),root=path.dirname(fileURLToPath(import.meta.url));
 const local=process.env.STUDIO_DATA_DIR||path.join(root,'.local-data'),dist=path.join(root,'dist');
 const port=Number(process.env.STUDIO_PORT||4318),origin='http://localhost:'+port;
 await fs.mkdir(local,{recursive:true});
-const db=path.join(local,'projects.json');
-const jobsDir=path.join(local,'draft-jobs'),profileRoot=path.join(local,'browser-profiles');
-await fs.mkdir(jobsDir,{recursive:true});await fs.mkdir(profileRoot,{recursive:true});
+const db=path.join(local,'projects.json'),prefsFile=path.join(local,'account-preferences.json');
+let accountPreferences;try{accountPreferences=validatePreferences(JSON.parse(await fs.readFile(prefsFile,'utf8')));}catch(e){if(e.code!=='ENOENT')throw e;accountPreferences=defaultPreferences();}
+let preferenceWrites=Promise.resolve();
+const jobsDir=path.join(local,'draft-jobs');
+await fs.mkdir(jobsDir,{recursive:true});
 let projects;
 try{projects=JSON.parse(await fs.readFile(db,'utf8'));}catch(e){if(e.code!=='ENOENT')throw e;projects=[seedProject()];}
 const busy=new Set();
@@ -89,12 +92,12 @@ async function creatorDraft(p,body){
   if(!cardsApproved(p))throw new Error('请先确认内容，再审核全部图卡');
   if(!['xiaohongshu','douyin'].includes(body.platform))throw new Error('只支持小红书和抖音草稿');
   const check=validatePlatform(p,body.platform);if(check.errors.length)throw new Error(check.errors.join('；'));
-  if(!await draftAutomationAvailable())throw new Error('未找到可用的 Google Chrome');
+  if(!await draftAutomationAvailable())throw new Error('Ego Lite 不可用，请安装并连接 ego-browser；不会改用 Chrome。');
   if(platformSessions[body.platform]?.status!=='logged_in')throw new Error('请先检查并完成'+(body.platform==='xiaohongshu'?'小红书':'抖音')+'扫码登录');
   const imagePaths=await imageFiles(p,body),copy=p.platforms[body.platform];
   const job={id:randomUUID(),projectId:p.id,platform:body.platform,status:'queued',message:'等待打开创作中心',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),cardFingerprint:cardKey(p),copyFingerprint:fingerprint({title:copy.title,body:copy.body,tags:copy.tags}),imageCount:imagePaths.length,imageFiles:imagePaths};
   copy.delivery={status:'opening',jobId:job.id,at:job.createdAt,cardFingerprint:job.cardFingerprint,fingerprint:job.copyFingerprint,by:'automation'};stamp(p);await persist();await saveJob(job);busy.add(p.id);
-  runCreatorDraft({platform:job.platform,title:copy.title,body:copy.body,tags:copy.tags,imageFiles:imagePaths,profileRoot,onUpdate:async(status,message)=>{copy.delivery={...copy.delivery,status,updatedAt:new Date().toISOString(),message};await updateJob(job,status,message);await persist();}}).then(async()=>{
+  runCreatorDraft({platform:job.platform,title:copy.title,body:copy.body,tags:copy.tags,imageFiles:imagePaths,onUpdate:async(status,message)=>{copy.delivery={...copy.delivery,status,updatedAt:new Date().toISOString(),message};await updateJob(job,status,message);await persist();}}).then(async()=>{
     if(job.status==='draft')copy.delivery={...copy.delivery,status:'draft',verifiedAt:new Date().toISOString()};
     else if(!['filled','needs_attention'].includes(job.status))await updateJob(job,'filled','内容已填入创作中心，请在浏览器中核对并保存草稿。');
     stamp(p);await persist();
@@ -103,10 +106,10 @@ async function creatorDraft(p,body){
 }
 async function checkPlatformSession(platform){
   if(!['xiaohongshu','douyin'].includes(platform))throw new Error('不支持的平台');
-  if(!await draftAutomationAvailable())throw new Error('未找到可用的 Google Chrome');
+  if(!await draftAutomationAvailable())throw new Error('Ego Lite 不可用，请安装并连接 ego-browser；不会改用 Chrome。');
   const job={id:randomUUID(),type:'session-check',platform,status:'queued',message:'等待检查登录状态',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};await saveJob(job);
   platformSessions[platform]={status:'opening',jobId:job.id,checkedAt:null};
-  prepareCreatorSession({platform,profileRoot,onUpdate:async(status,message)=>{platformSessions[platform]={status,jobId:job.id,checkedAt:status==='logged_in'?new Date().toISOString():null};await updateJob(job,status,message);}}).catch(async error=>{await updateJob(job,'error',error.message||'登录状态检查未完成');platformSessions[platform]={status:'error',jobId:job.id,message:job.message,checkedAt:null};});
+  prepareCreatorSession({platform,onUpdate:async(status,message)=>{platformSessions[platform]={status,jobId:job.id,checkedAt:status==='logged_in'?new Date().toISOString():null};await updateJob(job,status,message);}}).catch(async error=>{await updateJob(job,'error',error.message||'登录状态检查未完成');platformSessions[platform]={status:'error',jobId:job.id,message:job.message,checkedAt:null};});
   return publicJob(job);
 }
 const server=http.createServer(async(req,res)=>{
@@ -118,7 +121,12 @@ const server=http.createServer(async(req,res)=>{
       if(req.method!=='GET' && !String(req.headers['content-type']).startsWith('application/json')){json(res,415,{error:'仅接受 JSON 请求'});return;}
       if(route==='/api/health'){
         let available=false;try{await run('md2wechat',['config','validate','--json']);available=true;}catch{}
-        json(res,200,{mode:'local',wechat:available,draftAutomation:await draftAutomationAvailable(),platformSessions,storage:'本机保存',publishing:false});return;
+        json(res,200,{mode:'local',wechat:available,draftAutomation:await draftAutomationAvailable(),browserDriver:'ego-lite',platformSessions,storage:'本机保存',publishing:false});return;
+      }
+      if(route==='/api/account-preferences'){
+        if(req.method==='GET'){json(res,200,{preferences:accountPreferences});return;}
+        if(req.method==='PUT'){const body=validatePreferences(await readBody(req));if(body.revision!==accountPreferences.revision){json(res,409,{error:'账号偏好已在另一处修改，请刷新后继续'});return;}const next={...body,revision:body.revision+1};accountPreferences=next;preferenceWrites=preferenceWrites.catch(()=>{}).then(async()=>{await fs.writeFile(prefsFile+'.tmp',JSON.stringify(next,null,2));await fs.rename(prefsFile+'.tmp',prefsFile);});await preferenceWrites;json(res,200,{preferences:next});return;}
+        json(res,405,{error:'不支持此操作'});return;
       }
       const sm=route.match(/^\/api\/platform-sessions\/(xiaohongshu|douyin)\/check$/);
       if(sm&&req.method==='POST'){json(res,202,{job:await checkPlatformSession(sm[1])});return;}
@@ -131,9 +139,10 @@ const server=http.createServer(async(req,res)=>{
         for(const copy of Object.values(p.platforms)){copy.delivery=null;copy.history=[];}
         projects.unshift(p);await persist();json(res,201,{project:p});return;
       }
-      const m=route.match(/^\/api\/projects\/([a-zA-Z0-9_-]{1,80})(?:\/(creative-input|cover-import|cover-select|content-approve|cards-approve|draft|draft-job|manual-draft))?$/);
+      const m=route.match(/^\/api\/projects\/([a-zA-Z0-9_-]{1,80})(?:\/(planning-input|planning-import|planning-select|creative-input|cover-import|cover-select|content-approve|cards-approve|draft|draft-job|manual-draft))?$/);
       if(!m){json(res,404,{error:'接口不存在'});return;}
       const p=projects.find(x=>x.id===m[1]);if(!p){json(res,404,{error:'项目不存在'});return;}
+      if(req.method==='GET'&&m[2]==='planning-input'){const plan=planningOf(p,accountPreferences);json(res,200,{planning:plan,inputFingerprint:planningInputKey(plan),revision:p.revision,prompt:planningTask(p,accountPreferences,origin),importEndpoint:origin+'/api/projects/'+p.id+'/planning-import'});return;}
       if(req.method==='GET'&&m[2]==='creative-input'){
         const errors=creationErrors(p);if(errors.length)throw new Error(errors.join('；'));
         const creative=creativeOf(p);if(!creative)throw new Error('请先选择封面方式');
@@ -146,6 +155,8 @@ const server=http.createServer(async(req,res)=>{
       }
       if(busy.has(p.id)){json(res,409,{error:'正在填写草稿，请等待完成后再编辑'});return;}
       const body=await readBody(req);requireRevision(p,body);
+      if(req.method==='POST'&&m[2]==='planning-import'){importPlans(p,body,accountPreferences,randomUUID);stamp(p);await persist();json(res,200,{project:p});return;}
+      if(req.method==='POST'&&m[2]==='planning-select'){applyPlan(p,body.candidateId);invalidateContent(p);stamp(p);await persist();json(res,200,{project:p});return;}
       if(req.method==='POST'&&m[2]==='cover-import'){
         if(creationErrors(p).length)throw new Error(creationErrors(p).join('；'));
         if(body.inputFingerprint!==creativeInputKey(p))throw new Error('生成输入已变化，请使用当前版本重新生成');
@@ -161,6 +172,7 @@ const server=http.createServer(async(req,res)=>{
       }
       if(req.method==='PUT'&&!m[2]){
         const next=validateProject(body);const contentChanged=contentKey(p)!==contentKey(next),visualChanged=cardKey(p)!==cardKey(next);
+        if(next.planning!==undefined)p.planning=next.planning;
         p.content=next.content;p.visual=next.visual;p.reviewNote=String(next.reviewNote||'').slice(0,3000);
         for(const k of ['wechat','xiaohongshu','douyin']){
           const old=p.platforms[k],copy=next.platforms[k];

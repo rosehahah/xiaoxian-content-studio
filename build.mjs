@@ -3,6 +3,7 @@ import fs from 'node:fs/promises';
 await import('./scripts/build-icons.mjs');
 await build({entryPoints:['vendor-entry.js'],outfile:'dist/vendor.js',bundle:true,format:'esm',minify:true,target:'es2022'});
 await fs.copyFile('model.mjs','dist/model.mjs');
+await fs.copyFile('planning.mjs','dist/planning.mjs');
 await fs.copyFile('creative.mjs','dist/creative.mjs');
 await fs.copyFile('cover-library.mjs','dist/cover-library.mjs');
 await fs.copyFile('icon-library.mjs','dist/icon-library.mjs');

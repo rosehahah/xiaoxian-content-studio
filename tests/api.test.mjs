@@ -63,3 +63,28 @@ test('新封面流程：正文独立确认，多候选导入后须显式选择�
  const input2=await (await req('/api/projects/'+q.id+'/creative-input',null,'GET')).json();assert.equal(input2.portraitPath,null);assert.ok(input2.referencePath.endsWith('social-atlas.png'));assert.match(input2.prompt,/Do not include any person/);
  r=await req('/api/projects/'+q.id+'/cover-import',{revision:q.revision,inputFingerprint:input2.inputFingerprint,name:'objects.png',data:png});assert.equal(r.status,200);q=(await r.json()).project;assert.equal(q.visual.creative.candidates.length,4);assert.notEqual(creativeInputKey(q),input.inputFingerprint);
 });
+
+test('账号偏好独立保存并校验版本，不改旧项目内容和审核',async()=>{
+ const old=await(await req('/api/projects',null,'GET')).json();
+ let r=await req('/api/account-preferences',null,'GET');assert.equal(r.status,200);const prefs=(await r.json()).preferences;
+ r=await req('/api/account-preferences',{...prefs,tone:'面向小白，用短句'},'PUT');assert.equal(r.status,200);const saved=(await r.json()).preferences;assert.equal(saved.revision,prefs.revision+1);
+ r=await req('/api/account-preferences',prefs,'PUT');assert.equal(r.status,409);
+ assert.deepEqual(await(await req('/api/projects',null,'GET')).json(),old);
+ const {readFile}=await import('node:fs/promises');assert.deepEqual(JSON.parse(await readFile(path.join(temp,'account-preferences.json'),'utf8')),saved);
+});
+test('策划导入保留正文与审核，选定后才更新简报并撤销审核；过期请求被拒绝',async()=>{
+ const {seedProject,contentKey}=await import('../model.mjs');const {newPlanning}=await import('../planning.mjs');
+ let q=seedProject();q.id='planning-flow';q.planning=newPlanning(q);let r=await req('/api/projects',q);q=(await r.json()).project;
+ r=await req('/api/projects/'+q.id+'/content-approve',{revision:q.revision});q=(await r.json()).project;
+ const beforeText=contentKey(q),cards=structuredClone(q.content.cards),approval=structuredClone(q.contentApproval);
+ const input=await(await req('/api/projects/'+q.id+'/planning-input',null,'GET')).json();assert.match(input.prompt,/只策划/);
+ const candidates=[{title:'换电脑先搬什么？',audience:'AI小白',benefit:'分清代码、资料和工具',reason:'先理解概念',outline:['代码存哪里','资料怎么带走'],evidence:['GitHub文档']}];
+ r=await req('/api/projects/'+q.id+'/planning-import',{revision:input.revision,inputFingerprint:'wrong',candidates});assert.equal(r.status,400);
+ r=await req('/api/projects/'+q.id+'/planning-import',{revision:input.revision,inputFingerprint:input.inputFingerprint,candidates});assert.equal(r.status,200);q=(await r.json()).project;
+ assert.equal(contentKey(q),beforeText);assert.deepEqual(q.contentApproval,approval);assert.equal(q.planning.selectedId,null);
+ r=await req('/api/projects/'+q.id+'/planning-select',{revision:input.revision,candidateId:q.planning.candidates[0].id});assert.equal(r.status,409);
+ r=await req('/api/projects/'+q.id+'/planning-select',{revision:q.revision,candidateId:q.planning.candidates[0].id});assert.equal(r.status,200);q=(await r.json()).project;
+ assert.equal(q.contentApproval,null);assert.equal(q.cardApproval,null);assert.deepEqual(q.content.cards,cards);assert.equal(q.content.brief.benefit,candidates[0].benefit);
+ q.planning.idea='另一个问题';q.planning.selectedId=null;r=await req('/api/projects/'+q.id,q,'PUT');q=(await r.json()).project;
+ r=await req('/api/projects/'+q.id+'/planning-select',{revision:q.revision,candidateId:q.planning.candidates[0].id});assert.equal(r.status,400);
+});
