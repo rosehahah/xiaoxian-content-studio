@@ -71,3 +71,68 @@ html{color:var(--brand-text);background:#fffaf7}button:focus-visible,a:focus-vis
 @media(max-width:1100px){.planning-layout{grid-template-columns:1fr 1.2fr;gap:20px}.planning-mode{display:block}.planning-mode small{display:block;margin-top:6px}}
 @media(max-width:800px){.planning-layout{grid-template-columns:1fr}.planning-input{position:static}.preferences-grid{grid-template-columns:1fr}.planning-summary,.cover-context{align-items:flex-start;flex-direction:column}.planning-candidate{padding:24px}.planning-candidate dl{grid-template-columns:1fr;gap:6px}.planning-candidate dd{margin-bottom:10px}.content-subtabs button{padding:13px 18px}.planning-results-heading{margin-top:15px}}
 .step-tab{white-space:nowrap}
+
+/* Warm paper explainer pages: fixed export canvas, scoped independently from the cover. */
+.poster.concept-poster{width:1080px;height:1440px;position:relative;display:flex;flex-direction:column;padding:62px 72px 54px;box-sizing:border-box;background:#fbf8f1;color:#302d28;font-family:Arial,"PingFang SC","Microsoft YaHei",sans-serif;overflow:hidden}
+.concept-poster .cc-header{display:flex;justify-content:space-between;align-items:center;font-size:27px;line-height:1.4;color:#796f62;letter-spacing:1px;padding-bottom:26px;border-bottom:2px solid #ded5c6}
+.concept-poster .cc-eyebrow{margin-top:30px;font-size:30px;color:#996a45;letter-spacing:2px;font-weight:600}
+.concept-poster .cc-title{margin:18px 0 0;font-size:88px;font-weight:800;line-height:1.24;letter-spacing:-2px;white-space:pre-line;overflow-wrap:anywhere;color:#302d28}
+.concept-poster .cc-intro{font-size:40px;line-height:1.6;white-space:pre-line;margin:28px 0 0;color:#61574b}
+.concept-poster .cc-content{display:flex;flex-direction:column;gap:18px;margin-top:38px}
+.concept-poster .cc-block{padding:24px 30px;background:#f0ece2;border:2px solid #e4dccf;border-radius:20px;min-width:0;box-sizing:border-box}
+.concept-poster .cc-block h3{font-size:42px;line-height:1.35;margin:0 0 10px;font-weight:750;white-space:pre-line;color:#302d28}
+.concept-poster .cc-block p{font-size:37px;line-height:1.5;margin:0;white-space:pre-line;overflow-wrap:anywhere}
+.concept-poster .cc-block:nth-child(2n){background:#eaf0e8;border-color:#d9e1d4}
+.concept-poster .cc-block ul,.concept-poster .cc-block ol{list-style:none;padding:0;margin:20px 0 0;display:flex;flex-direction:column;gap:30px}
+.concept-poster .cc-block li{font-size:39px;line-height:1.5;display:flex;align-items:flex-start;gap:16px;overflow-wrap:anywhere}
+.concept-poster .cc-marker{display:flex;align-items:center;justify-content:center;flex:0 0 46px;height:46px;margin-top:6px;border-radius:50%;background:#fffaf1;color:#8e613e;font-size:27px;font-weight:700}
+.concept-poster.cc-layout-split .cc-content{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+.concept-poster.cc-layout-split .cc-block{padding:32px 27px}
+.concept-poster.cc-layout-split .cc-block h3{font-size:48px}
+.concept-poster.cc-layout-split li{font-size:38px;display:block}
+.concept-poster.cc-layout-split .cc-marker{margin:0 0 14px}
+.concept-poster.cc-layout-split li+li:before{content:"↓";display:block;margin:-14px 0 16px;color:#a0876d;font-size:32px}
+.concept-poster .cc-diagram{padding:0;border:0;background:transparent!important}
+.concept-poster .cc-flow{display:flex;flex-direction:column;align-items:center}
+.concept-poster .cc-flow-node{width:100%;padding:30px 34px;border-radius:20px;background:#efe3d2;border:2px solid #ddcdb7;display:grid;grid-template-columns:220px 1fr;align-items:center;gap:24px;box-sizing:border-box}
+.concept-poster .cc-flow-node:nth-of-type(2){background:#e6eee2;border-color:#d3decf}
+.concept-poster .cc-flow-node:nth-of-type(3){background:#f3e4d9;border-color:#e6cfc1}
+.concept-poster .cc-flow-node b{font-size:48px;line-height:1.35}
+.concept-poster .cc-flow-node span{font-size:39px;line-height:1.5}
+.concept-poster .cc-arrow{width:44px;height:44px;display:block;margin:8px 0;flex-shrink:0}
+.concept-poster .cc-callout{background:#e6eee2!important;border-color:#cfddc9!important}
+.concept-poster .cc-note{margin:30px 0 0;font-size:29px;line-height:1.6;white-space:pre-line;color:#766c5e}
+.concept-poster .cc-footer{margin-top:auto;padding-top:28px;display:flex;justify-content:space-between;align-items:center;font-size:24px;color:#8b8172;letter-spacing:1px}
+
+.concept-poster.cc-directory .cc-content{gap:16px;margin-top:30px}
+.concept-poster.cc-directory .cc-block{display:grid;grid-template-columns:205px 1fr;gap:16px;align-items:center;padding:28px 26px;min-height:142px}
+.concept-poster.cc-directory .cc-block h3{font-size:42px;margin:0}
+.concept-poster.cc-directory .cc-block p{font-size:38px;line-height:1.5}
+.concept-poster.cc-layout-split .cc-marker{display:none}
+
+/* Plain reading: title, supporting text and page number only. */
+.poster.concept-poster.cc-minimal{padding:118px 90px 80px;background:#fbf9f4;color:#292621}
+.concept-poster.cc-minimal .cc-title{margin:0;font-size:88px;line-height:1.24;letter-spacing:-2px;font-weight:750}
+.concept-poster.cc-minimal .cc-content{display:flex;flex-direction:column;gap:34px;margin-top:66px}
+.concept-poster.cc-minimal .cc-intro{margin:0;font-size:39px;line-height:1.65;color:#534e47}
+.concept-poster.cc-minimal .cc-block{padding:0;background:transparent!important;border:0;border-radius:0}
+.concept-poster.cc-minimal .cc-block h3{font-size:39px;line-height:1.45;margin:0 0 12px;color:#34302a;font-weight:650}
+.concept-poster.cc-minimal .cc-block p{margin:0;font-size:37px;line-height:1.65;color:#534e47;white-space:pre-line}
+.concept-poster.cc-minimal .cc-plain-row{display:grid;grid-template-columns:220px 1fr;gap:30px;margin-bottom:26px!important}
+.concept-poster.cc-minimal .cc-plain-row:last-child{margin-bottom:0!important}
+.concept-poster.cc-minimal .cc-plain-row strong{font-weight:650;color:#34302a}
+.concept-poster.cc-minimal .cc-note{margin:0;font-size:30px;line-height:1.65;color:#857e72}
+.concept-poster.cc-minimal .cc-footer{justify-content:flex-end;flex-shrink:0;font-size:29px;line-height:1.4;letter-spacing:2px;color:#857e72;padding-top:26px}
+.poster.concept-poster.cc-editorial{background-color:var(--cc-paper);background-image:radial-gradient(#3b4d4310 .8px,transparent .8px);background-size:13px 13px;padding-top:106px}
+.cc-editorial:before{content:"";position:absolute;width:440px;height:440px;right:0;bottom:0;background:radial-gradient(circle at 100% 100%,transparent 280px,var(--cc-tint) 281px,var(--cc-tint) 333px,transparent 334px);opacity:.35;pointer-events:none}
+.cc-editorial:after{content:"";position:absolute;left:90px;top:64px;width:55px;height:5px;background:var(--cc-accent);pointer-events:none}
+.concept-poster.cc-editorial .cc-title,.concept-poster.cc-editorial .cc-content,.concept-poster.cc-editorial .cc-footer{position:relative;z-index:1}
+.concept-poster.cc-editorial .cc-title-accent{color:var(--cc-accent)}
+.concept-poster.cc-editorial .cc-content{margin-top:54px;gap:30px}
+.concept-poster.cc-editorial .cc-block h3{color:var(--cc-accent)}
+.concept-poster.cc-editorial .cc-product-name{font-size:46px;letter-spacing:-1px;background:linear-gradient(transparent 68%,var(--cc-tint) 68%);padding-right:4px}
+.concept-poster.cc-editorial .cc-plain-row strong{color:var(--cc-accent)}
+.concept-poster.cc-editorial .cc-note{color:#716f68}
+.concept-poster.cc-editorial .cc-footer{justify-content:space-between;color:var(--cc-accent);padding-top:22px;align-items:center}
+.concept-poster.cc-editorial .cc-editorial-art{width:auto;height:112px;max-width:650px;overflow:visible;color:var(--cc-accent)}
+.cc-editorial-art text{font-size:29px;font-weight:600;fill:currentColor;stroke:none;letter-spacing:-.3px}

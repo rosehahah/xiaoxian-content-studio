@@ -10,7 +10,7 @@ export async function checkEgoDraftUI(native){
  for(const platform of ['xiaohongshu','douyin']){
   await page.setContent('<input type="file" accept="image/png" multiple><input id="title" placeholder="标题"><textarea id="body" placeholder="正文"></textarea><button id="save">保存草稿</button><button id="publish">发布</button>');
   await native.evaluate(()=>{window.saved=0;window.published=0;document.querySelector('#save').onclick=()=>window.saved++;document.querySelector('#publish').onclick=()=>window.published++;});
-  const updates=[];await fillCreatorDraft({platform,title:'本机草稿检查',body,tags,imageFiles:[image],page,onUpdate:async(s,m)=>updates.push(s)});
+  const updates=[];await fillCreatorDraft({platform,title:'本机草稿检查',body,tags,imageFiles:[image],page,sessionCheck:async()=>true,onUpdate:async(s,m)=>updates.push(s)});
   const result=await native.evaluate(()=>({title:document.querySelector('#title').value,body:document.querySelector('#body').value,files:document.querySelector('input[type=file]').files.length,saved:window.saved,published:window.published}));
   assert.equal(result.title,'本机草稿检查');assert.equal(result.files,1);assert.equal(result.saved,1);assert.equal(result.published,0);assert.equal(updates.at(-1),'draft');
   if(platform==='xiaohongshu')assert.equal(verifyXiaohongshuCopy(result.body,body,tags).ok,true);else assert.equal(result.body,body+'\n\n'+tags.map(t=>'#'+t).join(' '));

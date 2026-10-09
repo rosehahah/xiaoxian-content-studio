@@ -2,6 +2,8 @@ import {defaultPreferences,validatePreferences,planningOf,planningInputKey,plann
 import {coverReference,COVER_ATLAS} from './cover-library.mjs';
 import {creativeOf,creationErrors,coverErrors,creativeInputKey,coverPrompt,imageDataValid} from './creative.mjs';
 import http from 'node:http';
+import JSZip from 'jszip';
+import {deliverWechat,wechatDescription,wechatProblem} from './wechat-delivery.mjs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
@@ -24,6 +26,8 @@ let projects;
 try{projects=JSON.parse(await fs.readFile(db,'utf8'));}catch(e){if(e.code!=='ENOENT')throw e;projects=[seedProject()];}
 const busy=new Set();
 const jobs=new Map();
+const sessionChecks=new Map();
+let wechatConnection={status:'unchecked',message:'本机配置尚未经过联网检查'};
 const platformSessions={xiaohongshu:{status:'unchecked'},douyin:{status:'unchecked'}};
 let persistence=Promise.resolve();
 function persist(){const snapshot=JSON.stringify(projects,null,2);persistence=persistence.catch(()=>{}).then(async()=>{await fs.writeFile(db+'.tmp',snapshot);await fs.rename(db+'.tmp',db);});return persistence;}
@@ -35,14 +39,16 @@ function requireRevision(p,body){if(body.revision!==p.revision){const e=new Erro
 function stamp(p){p.revision++;p.updatedAt=new Date().toISOString();}
 function creds(source){const value=keys=>{for(const key of keys){const m=source.match(new RegExp('^\\s*'+key+':\\s*["\']?([^"\'\\n#]+)','m'));if(m)return m[1].trim();}return '';};return {appid:process.env.WECHAT_APPID||value(['wechat_appid','WECHAT_APPID','appid']),secret:process.env.WECHAT_SECRET||value(['wechat_secret','WECHAT_SECRET','secret'])};}
 async function wxCall(endpoint,payload){
-  const cfg=creds(await fs.readFile(path.join(os.homedir(),'.config/md2wechat/config.yaml'),'utf8'));
+  let source='';try{source=await fs.readFile(path.join(os.homedir(),'.config/md2wechat/config.yaml'),'utf8');}catch(e){if(e.code!=='ENOENT')throw e;}
+  const cfg=creds(source);if(!cfg.appid||!cfg.secret)throw Error('本机公众号配置缺少 AppID 或 AppSecret');
   const get=async(url,body)=>{
     const args=['-sS','--max-time','30'];if(body)args.push('-X','POST','-H','Content-Type: application/json','--data-binary',JSON.stringify(body));args.push(url);
     let output;try{output=await run('curl',args,{maxBuffer:4*1024*1024});}catch{throw new Error('公众号核对请求未完成，请稍后核对草稿');}
-    const data=JSON.parse(output.stdout);if(data.errcode)throw new Error('微信接口 '+data.errcode+'：'+data.errmsg);return data;
+    let data;try{data=JSON.parse(output.stdout);}catch{throw Error('微信接口响应无法解析');}if(data.errcode){const error=new Error('微信接口 '+data.errcode+'：'+data.errmsg);error.wechatCode=data.errcode;throw error;}return data;
   };
   const token=(await get('https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid='+encodeURIComponent(cfg.appid)+'&secret='+encodeURIComponent(cfg.secret))).access_token;
   if(!token)throw new Error('未取得公众号访问令牌');
+  if(!endpoint)return {ok:true};
   return get('https://api.weixin.qq.com/cgi-bin/'+endpoint+'?access_token='+token,payload);
 }
 async function imageFiles(p,body){
@@ -58,32 +64,36 @@ async function imageFiles(p,body){
   }
   return files;
 }
-async function wechatDraft(p,body){
+async function checkWechatConnection(){
+  try{await wxCall(null);wechatConnection={status:'ready',message:'公众号令牌与当前出口 IP 检查通过',checkedAt:new Date().toISOString()};}
+  catch(error){wechatConnection={...wechatProblem(error),checkedAt:new Date().toISOString()};}
+  return wechatConnection;
+}
+async function wechatDraft(p,body,verifyOnly=false){
   if(!cardsApproved(p))throw new Error('请先确认内容，再审核全部图卡');
   const check=validatePlatform(p,'wechat');if(check.errors.length)throw new Error(check.errors.join('；'));
   const copy=p.platforms.wechat,deliveryKey=fingerprint({card:cardKey(p),title:copy.title,body:copy.body,tags:copy.tags});
-  const previous=[copy.delivery,...(copy.history||[])].find(x=>x?.fingerprint===deliveryKey&&x.mediaId);
-  if(previous){
-    const remote=await wxCall('draft/get',{media_id:previous.mediaId});
-    verifyRemote(p,remote);
-    copy.delivery={...previous,status:'draft',verifiedAt:new Date().toISOString()};stamp(p);await persist();return p;
-  }
-  const images=await imageFiles(p,body);
-  const description=[copy.body,...copy.tags.map(t=>'#'+t)].join('\n');
-  const args=['create_image_post','--title',copy.title,'--content',description,'--images',images.join(','),'--json'];
-  let result;
-  try{result=await run('md2wechat',args,{maxBuffer:4*1024*1024,timeout:120000});}
-  catch(e){let data;try{data=JSON.parse(e.stdout);}catch{}throw new Error(data?.message||'公众号上传未完成，请检查本机接口配置和网络。');}
-  const output=JSON.parse(result.stdout);if(!output.success)throw new Error(output.message||'公众号草稿创建失败');
-  const mediaId=output.data.media_id;
-  copy.delivery={status:'unverified',mediaId,fingerprint:deliveryKey,cardFingerprint:cardKey(p),at:new Date().toISOString()};
-  stamp(p);await persist();
-  const remote=await wxCall('draft/get',{media_id:mediaId});verifyRemote(p,remote);
-  copy.delivery.status='draft';copy.delivery.verifiedAt=new Date().toISOString();await persist();return p;
-}
-function verifyRemote(p,remote){
-  const item=remote.news_item?.[0],copy=p.platforms.wechat;
-  if(item?.article_type!=='newspic'||item.title!==copy.title||item.image_info?.image_list?.length!==p.content.cards.length)throw new Error('已创建草稿，但读回校验不一致，请到公众号检查');
+  let images=[];
+  await deliverWechat({copy,fingerprint:deliveryKey,cardFingerprint:cardKey(p),imageCount:p.content.cards.length,verifyOnly},{
+    prepare:async()=>{
+      const imageBody=body.images?.length?body:{...body,cardFingerprint:cardKey(p),images:await Promise.all(p.content.cards.map(async(_,i)=>'data:image/png;base64,'+(await fs.readFile(path.join(local,p.id,cardKey(p),String(i+1).padStart(2,'0')+'.png'))).toString('base64')))};
+      images=await imageFiles(p,imageBody);
+      const zip=new JSZip();for(let i=0;i<images.length;i++)zip.file('图片/'+String(i+1).padStart(2,'0')+'.png',await fs.readFile(images[i]));
+      zip.file('公众号配文.txt',copy.title+'\n\n'+wechatDescription(copy));
+      zip.file('审核记录.json',JSON.stringify({projectId:p.id,cardFingerprint:cardKey(p),contentApproval:p.contentApproval,cardApproval:p.cardApproval},null,2));
+      zip.file('手动填写说明.txt','图片按序上传为公众号多图草稿，再粘贴标题与配文。核对图片顺序、完整文字和草稿箱记录后再发布。此包不含账号凭证，也不代表远程写入成功。');
+      const dir=path.join(local,'wechat-packages',p.id);await fs.mkdir(dir,{recursive:true});await fs.writeFile(path.join(dir,deliveryKey+'.zip'),await zip.generateAsync({type:'nodebuffer',compression:'DEFLATE'}));
+      return {fingerprint:deliveryKey,url:'/api/projects/'+p.id+'/wechat-package'};
+    },
+    preflight:async()=>{const result=await checkWechatConnection();if(result.status!=='ready'){const e=Error(result.message);e.wechatCode=result.code;if(result.ip)e.message+=' invalid ip '+result.ip;throw e;}},
+    create:async()=>{
+      let result;try{result=await run('md2wechat',['create_image_post','--title',copy.title,'--content',wechatDescription(copy),'--images',images.join(','),'--json'],{maxBuffer:4*1024*1024,timeout:120000});}
+      catch(e){let data;try{data=JSON.parse(e.stdout);}catch{}throw Error(data?.message||'公众号创建请求中断，结果未知');}
+      const output=JSON.parse(result.stdout);if(!output.success)throw Error(output.message||'公众号草稿创建失败');return {mediaId:output.data?.media_id};
+    },
+    read:mediaId=>wxCall('draft/get',{media_id:mediaId}),
+    persist:async()=>{stamp(p);await persist();},
+  });return p;
 }
 function publicJob(job){const {imageFiles,...safe}=job;return safe;}
 async function saveJob(job){jobs.set(job.id,job);await fs.writeFile(path.join(jobsDir,job.id+'.json'),JSON.stringify(publicJob(job),null,2));}
@@ -101,16 +111,22 @@ async function creatorDraft(p,body){
     if(job.status==='draft')copy.delivery={...copy.delivery,status:'draft',verifiedAt:new Date().toISOString()};
     else if(!['filled','needs_attention'].includes(job.status))await updateJob(job,'filled','内容已填入创作中心，请在浏览器中核对并保存草稿。');
     stamp(p);await persist();
-  }).catch(async error=>{await updateJob(job,'error',error.message||'自动填写未完成');copy.delivery={...copy.delivery,status:'error',message:job.message,updatedAt:job.updatedAt};stamp(p);await persist();}).finally(()=>busy.delete(p.id));
+  }).catch(async error=>{if(/登录状态已失效|安全验证/.test(error.message))platformSessions[job.platform]={status:'unchecked',message:error.message};await updateJob(job,'error',job.status==='error'?job.message:error.message||'自动填写未完成');copy.delivery={...copy.delivery,status:'error',message:job.message,updatedAt:job.updatedAt};stamp(p);await persist();}).finally(()=>busy.delete(p.id));
   return publicJob(job);
 }
 async function checkPlatformSession(platform){
   if(!['xiaohongshu','douyin'].includes(platform))throw new Error('不支持的平台');
-  if(!await draftAutomationAvailable())throw new Error('Ego Lite 不可用，请安装并连接 ego-browser；不会改用 Chrome。');
-  const job={id:randomUUID(),type:'session-check',platform,status:'queued',message:'等待检查登录状态',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};await saveJob(job);
-  platformSessions[platform]={status:'opening',jobId:job.id,checkedAt:null};
-  prepareCreatorSession({platform,onUpdate:async(status,message)=>{platformSessions[platform]={status,jobId:job.id,checkedAt:status==='logged_in'?new Date().toISOString():null};await updateJob(job,status,message);}}).catch(async error=>{await updateJob(job,'error',error.message||'登录状态检查未完成');platformSessions[platform]={status:'error',jobId:job.id,message:job.message,checkedAt:null};});
-  return publicJob(job);
+  if(sessionChecks.has(platform))return publicJob(await sessionChecks.get(platform));
+  const start=(async()=>{
+    if(!await draftAutomationAvailable())throw new Error('Ego Lite 不可用，请安装并连接 ego-browser；不会改用 Chrome。');
+    const previous=platformSessions[platform],spaceId=['waiting_login','needs_attention'].includes(previous.status)?previous.spaceId:null;
+    const job={id:randomUUID(),type:'session-check',platform,status:'queued',message:'等待检查登录状态',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};await saveJob(job);
+    platformSessions[platform]={status:'opening',jobId:job.id,checkedAt:null};
+    prepareCreatorSession({platform,spaceId,onUpdate:async(status,message,event={})=>{job.spaceId=event.spaceId||job.spaceId;platformSessions[platform]={status,jobId:job.id,spaceId:job.spaceId,message,checkedAt:status==='logged_in'?new Date().toISOString():null};await updateJob(job,status,message);}}).catch(async error=>{await updateJob(job,'error',job.status==='error'?job.message:error.message||'登录状态检查未完成');platformSessions[platform]={status:'error',jobId:job.id,message:job.message,checkedAt:null};}).finally(()=>sessionChecks.delete(platform));
+    return job;
+  })();
+  sessionChecks.set(platform,start);
+  try{return publicJob(await start);}catch(error){sessionChecks.delete(platform);throw error;}
 }
 const server=http.createServer(async(req,res)=>{
   try{
@@ -120,9 +136,10 @@ const server=http.createServer(async(req,res)=>{
     if(route.startsWith('/api/')){
       if(req.method!=='GET' && !String(req.headers['content-type']).startsWith('application/json')){json(res,415,{error:'仅接受 JSON 请求'});return;}
       if(route==='/api/health'){
-        let available=false;try{await run('md2wechat',['config','validate','--json']);available=true;}catch{}
-        json(res,200,{mode:'local',wechat:available,draftAutomation:await draftAutomationAvailable(),browserDriver:'ego-lite',platformSessions,storage:'本机保存',publishing:false});return;
+        let available=false;try{const result=await run('md2wechat',['config','validate','--json'],{timeout:5000});const data=JSON.parse(result.stdout);available=data.success!==false;}catch{}
+        json(res,200,{mode:'local',wechat:available,draftAutomation:await draftAutomationAvailable(),browserDriver:'ego-lite',platformSessions,wechatConnection,storage:'本机保存',publishing:false});return;
       }
+      if(route==='/api/wechat/check'&&req.method==='POST'){json(res,200,{connection:await checkWechatConnection()});return;}
       if(route==='/api/account-preferences'){
         if(req.method==='GET'){json(res,200,{preferences:accountPreferences});return;}
         if(req.method==='PUT'){const body=validatePreferences(await readBody(req));if(body.revision!==accountPreferences.revision){json(res,409,{error:'账号偏好已在另一处修改，请刷新后继续'});return;}const next={...body,revision:body.revision+1};accountPreferences=next;preferenceWrites=preferenceWrites.catch(()=>{}).then(async()=>{await fs.writeFile(prefsFile+'.tmp',JSON.stringify(next,null,2));await fs.rename(prefsFile+'.tmp',prefsFile);});await preferenceWrites;json(res,200,{preferences:next});return;}
@@ -139,7 +156,7 @@ const server=http.createServer(async(req,res)=>{
         for(const copy of Object.values(p.platforms)){copy.delivery=null;copy.history=[];}
         projects.unshift(p);await persist();json(res,201,{project:p});return;
       }
-      const m=route.match(/^\/api\/projects\/([a-zA-Z0-9_-]{1,80})(?:\/(planning-input|planning-import|planning-select|creative-input|cover-import|cover-select|content-approve|cards-approve|draft|draft-job|manual-draft))?$/);
+      const m=route.match(/^\/api\/projects\/([a-zA-Z0-9_-]{1,80})(?:\/(planning-input|planning-import|planning-select|creative-input|cover-import|cover-select|content-approve|cards-approve|draft|wechat-verify|wechat-package|draft-job|manual-draft))?$/);
       if(!m){json(res,404,{error:'接口不存在'});return;}
       const p=projects.find(x=>x.id===m[1]);if(!p){json(res,404,{error:'项目不存在'});return;}
       if(req.method==='GET'&&m[2]==='planning-input'){const plan=planningOf(p,accountPreferences);json(res,200,{planning:plan,inputFingerprint:planningInputKey(plan),revision:p.revision,prompt:planningTask(p,accountPreferences,origin),importEndpoint:origin+'/api/projects/'+p.id+'/planning-import'});return;}
@@ -152,6 +169,11 @@ const server=http.createServer(async(req,res)=>{
         if(creative.referenceId==='custom'&&creative.reference){const dir=path.join(local,'creative-inputs',p.id);await fs.mkdir(dir,{recursive:true});const ext=creative.reference.data.startsWith('data:image/jpeg')?'jpg':creative.reference.data.startsWith('data:image/webp')?'webp':'png';referencePath=path.join(dir,'composition.'+ext);await fs.writeFile(referencePath,Buffer.from(creative.reference.data.split(',')[1],'base64'));}
         else if(coverReference(creative.referenceId))referencePath=path.join(dist,COVER_ATLAS);
         json(res,200,{mode:creative.mode,portraitPath:creative.mode==='portrait'?portraitPath:null,referencePath,reference:coverReference(creative.referenceId)||null,prompt:coverPrompt(p),inputFingerprint:creativeInputKey(p),revision:p.revision,importEndpoint:origin+'/api/projects/'+p.id+'/cover-import',selectionEndpoint:origin+'/api/projects/'+p.id+'/cover-select'});return;
+      }
+      if(req.method==='GET'&&m[2]==='wechat-package'){
+        const copy=p.platforms.wechat,key=fingerprint({card:cardKey(p),title:copy.title,body:copy.body,tags:copy.tags});
+        if(!cardsApproved(p)||copy.delivery?.fallback?.fingerprint!==key)throw Error('此版本尚未生成兜底包，请先准备草稿或下载通用交付包');
+        const data=await fs.readFile(path.join(local,'wechat-packages',p.id,key+'.zip'));res.writeHead(200,{'Content-Type':'application/zip','Content-Disposition':'attachment; filename=wechat-draft.zip','Cache-Control':'no-store'});res.end(data);return;
       }
       if(busy.has(p.id)){json(res,409,{error:'正在填写草稿，请等待完成后再编辑'});return;}
       const body=await readBody(req);requireRevision(p,body);
@@ -191,8 +213,8 @@ const server=http.createServer(async(req,res)=>{
         if(!contentApproved(p))throw new Error('请先确认内容');
         if(body.cardFingerprint!==cardKey(p)||body.viewedCount!==p.content.cards.length)throw new Error('请预览全部图卡后再确认');
         p.cardApproval={fingerprint:cardKey(p),at:new Date().toISOString(),by:'user'};p.stage='drafts';
-      }else if(m[2]==='draft'){
-        busy.add(p.id);try{await wechatDraft(p,body);json(res,200,{project:p});}finally{busy.delete(p.id);}return;
+      }else if(m[2]==='draft'||m[2]==='wechat-verify'){
+        busy.add(p.id);try{await wechatDraft(p,body,m[2]==='wechat-verify');json(res,200,{project:p});}finally{busy.delete(p.id);}return;
       }else if(m[2]==='draft-job'){
         const job=await creatorDraft(p,body);json(res,202,{job,project:p});return;
       }else if(m[2]==='manual-draft'){

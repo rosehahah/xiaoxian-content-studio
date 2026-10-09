@@ -1,7 +1,12 @@
 import {spawn,execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {fileURLToPath} from 'node:url';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import {StringDecoder} from 'node:string_decoder';
 import {EgoPageAdapter} from './ego-adapter.mjs';
+import {configureCreatorPermissions} from './creator-permissions.mjs';
 import {appendXiaohongshuTopics,verifyXiaohongshuCopy} from './xiaohongshu-topics.mjs';
 
 const run=promisify(execFile);
@@ -71,20 +76,41 @@ async function findUpload(page){
   for(let i=0;i<await inputs.count();i++){const item=inputs.nth(i),accept=(await item.getAttribute('accept')||'').toLowerCase();if(!accept||accept.includes('image')||accept.includes('.png')||accept.includes('.jpg'))return item;}
   return null;
 }
-async function hasLoginState(page){
-  // Require the creator page's visible upload/editor UI. A stale cookie alone
-  // must not unlock a job. No session tokens are read or exported.
-  if(await firstVisible(page,['input[placeholder*="标题"]','textarea[placeholder*="标题"]']))return true;
-  return Boolean(await findUpload(page));
+export function classifyCreatorSession(evidence,platform){
+  const host=PLATFORM[platform]?new URL(PLATFORM[platform].url).hostname:null;
+  let url;try{url=new URL(evidence.url);}catch{}
+  if(!host||url?.hostname!==host)return {status:'unknown',message:'尚未到达创作中心，请检查页面和网络。'};
+  const text=evidence.text||'';
+  if(evidence.challenge)return {status:'needs_attention',message:'页面要求安全验证，请在 Ego Lite 中完成验证后重新检查。'};
+  if(evidence.loginForm||/扫码登录|扫描二维码登录|手机号登录|短信登录|账号密码登录/.test(text)||/\/(login|signin)(?:[/?]|$)/i.test(url.pathname))return {status:'waiting_login',message:'请在 Ego Lite 中完成登录，再点击“重新检查”。'};
+  if(evidence.editor||evidence.uploadArea||evidence.creatorNavigation)return {status:'logged_in',message:'已识别到登录后的创作中心。'};
+  return {status:'unknown',message:'页面仍在加载，或创作入口尚未识别；当前不能确认登录状态。'};
 }
-async function waitForLogin(page,config,onUpdate){
-  const deadline=Date.now()+10*60*1000;let announced=false;
+export async function inspectCreatorSession(page,platform){
+  const evidence=await page.evaluate(()=>{
+    const visible=n=>Boolean(n&&n.getClientRects().length&&getComputedStyle(n).visibility!=='hidden'&&getComputedStyle(n).display!=='none');
+    const text=document.body?.innerText||'';
+    const inputs=[...document.querySelectorAll('input,textarea')].filter(visible);
+    const editor=inputs.some(n=>/标题/.test(n.placeholder||''));
+    const loginForm=inputs.some(n=>n.type==='password'||/手机号|验证码/.test(n.placeholder||''));
+    const challenge=[...document.querySelectorAll('[role="dialog"],iframe,[class*="captcha"],[id*="captcha"]')].filter(visible).some(n=>/captcha|verify|验证|滑块/i.test([n.id,n.className,n.title,n.getAttribute('src'),n.innerText].join(' ')))||/拖动滑块|完成安全验证|请完成验证|访问受限/.test(text);
+    // A hidden input alone says nothing about login. Require the visible creator UI.
+    const uploadArea=/拖拽.*(?:图片|视频)|点击上传|选择图片|上传图片/.test(text)&&[...document.querySelectorAll('input[type="file"]')].length>0;
+    const creatorNavigation=/笔记管理|作品管理/.test(text)&&/发布笔记|发布作品|上传图文|发布图文/.test(text);
+    return {url:location.href,text:text.slice(0,12000),editor,loginForm,challenge,uploadArea,creatorNavigation};
+  });
+  return classifyCreatorSession(evidence,platform);
+}
+async function hasLoginState(page,platform){return (await inspectCreatorSession(page,platform)).status==='logged_in';}
+async function waitForLogin(page,platform,onUpdate){
+  const deadline=Date.now()+30000;let previous='';
   while(Date.now()<deadline){
-    await chooseImageMode(page,config.imageTabs);if(await hasLoginState(page))return;
-    if(!announced){announced=true;await onUpdate('waiting_login','请在打开的 Ego Lite 中完成扫码登录；检测到图文创作入口后，工作台会解锁草稿填写。');}
-    await wait(1800);
+    const result=await inspectCreatorSession(page,platform);
+    if(result.status!=='unknown')return result;
+    if(previous!==result.message){previous=result.message;await onUpdate('checking',result.message);}
+    await wait(1000);
   }
-  throw new Error('等待扫码登录超时，请重新检查登录状态');
+  return {status:'needs_attention',message:'页面加载后仍未识别到登录或创作入口，请在 Ego Lite 检查页面，再重新检查。'};
 }
 async function saveDraft(page){
   // 只匹配明确的草稿动作；任何包含“发布”的按钮都不会被点击。
@@ -99,12 +125,12 @@ async function saveDraft(page){
 }
 async function runMock({onUpdate}){await onUpdate('opening','模拟打开创作中心');await onUpdate('uploading','模拟上传审核图卡');await onUpdate('filling','模拟填写配文');await onUpdate('draft','模拟草稿已保存');}
 
-export async function fillCreatorDraft({platform,title,body,tags,imageFiles,onUpdate,page}){
+export async function fillCreatorDraft({platform,title,body,tags,imageFiles,onUpdate,page,sessionCheck=hasLoginState}){
   if(!PLATFORM[platform])throw new Error('不支持的平台');
   if(process.env.STUDIO_DRAFT_DRIVER==='mock')return runMock({onUpdate});
   const config=PLATFORM[platform];await onUpdate('opening','正在打开'+config.name+'创作中心');
+  if(!await waitForEditor(page,async p=>await sessionCheck(p,platform)?true:null,16))throw new Error('登录状态已失效或页面需要验证，请先在工作台重新检查登录状态');
   await chooseImageMode(page,config.imageTabs);
-  if(!await waitForEditor(page,async p=>await hasLoginState(p)?true:null,16))throw new Error('登录状态已失效，请先在工作台重新检查登录状态');
   let upload=await findUpload(page);
   for(let i=0;!upload&&i<8;i++){await wait(500);await chooseImageMode(page,config.imageTabs);upload=await findUpload(page);}
   if(!upload)throw new Error('已登录，但没有识别到图文上传入口，请在浏览器中确认已进入图文发布页');
@@ -135,55 +161,80 @@ export async function fillCreatorDraft({platform,title,body,tags,imageFiles,onUp
   else await onUpdate('filled','内容已填好。页面未找到明确的保存草稿按钮，请在浏览器中核对后手动保存。');
 }
 
-export async function runEgoCreatorTask(input,{taskSpace}){
+export async function runEgoCreatorTask(input,{taskSpace,configurePermissions=configureCreatorPermissions,onEvent=event=>console.log(EVENT+JSON.stringify(event))}){
   const config=PLATFORM[input.platform];if(!config)throw Error('不支持的平台');
   const task=await taskSpace('小苋 · '+config.name+(input.kind==='session'?'登录检查':'草稿填写'));
-  const page=task.page('p1');let handedOff=false;
-  const onUpdate=async(status,message)=>console.log(EVENT+JSON.stringify({status,message,browser:'ego-lite',spaceId:task.spaceId}));
+  let handedOff=false,page;
+  const onUpdate=async(status,message)=>onEvent({status,message,browser:'ego-lite',spaceId:task.spaceId});
   try{
     await onUpdate('opening','正在使用 Ego Lite 打开'+config.name+'创作中心');
+    if(task.pages){
+      const managed=await task.pages();page=managed.find(p=>p.label==='p1')||managed[0];
+      if(!page){const active=(await task.tabs()).find(tab=>tab.active);page=active?await task.adopt(active.page):await task.newPage();}
+    }else page=task.page('p1');
+    await configurePermissions(page,input.platform);
     await page.goto(config.url);
     await page.snapshot();
     const adapted=new EgoPageAdapter(page);
     if(input.kind==='session'){
-      await waitForLogin(adapted,config,onUpdate);
-      await onUpdate('logged_in',config.name+'登录状态已确认，可以填写草稿。');
+      const result=await waitForLogin(adapted,input.platform,onUpdate);
+      await onUpdate(result.status,result.status==='logged_in'?config.name+'登录状态已确认，可以填写草稿。':result.message);
+      if(result.status!=='logged_in'){await task.handOff();return;}
     }else await fillCreatorDraft({...input,page:adapted,onUpdate});
     // Leave the result for the user to verify or save. Never click publish.
-    await task.finish({keep:['p1']});
+    await task.finish({keep:[page.label||'p1']});
   }catch(error){
     if(controlStopped(error))throw error;
     try{await task.handOff();handedOff=true;}catch{}
     throw Error(error.message+(handedOff?'；Ego Lite 页面已交给你检查。':''));
   }
 }
+const statuses=new Set(['opening','checking','waiting_login','logged_in','uploading','filling','ready_to_save','draft','filled','needs_attention','error']);
+const terminalStatuses=new Set(['waiting_login','logged_in','draft','filled','needs_attention']);
+export function eventReader(receive){
+  const decoder=new StringDecoder('utf8');let pending='';
+  const line=value=>{if(!value.startsWith(EVENT))return;const event=JSON.parse(value.slice(EVENT.length));if(!statuses.has(event.status)||typeof event.message!=='string')throw Error('Ego Lite 状态响应格式错误');receive(event);};
+  return {push(chunk){pending+=decoder.write(Buffer.from(chunk));const lines=pending.split('\n');pending=lines.pop();for(const value of lines)line(value.trimEnd());},end(){pending+=decoder.end();if(pending)line(pending.trimEnd());pending='';}};
+}
 export async function executeEgoTask(input,onUpdate){
-  const source=`const {runEgoCreatorTask}=await import(${JSON.stringify(workerPath)});await runEgoCreatorTask(${JSON.stringify(input)},{taskSpace});`;
-  return new Promise((resolve,reject)=>{
+  // Ego CLI may buffer console output for a whole browser round. A local journal
+  // provides live progress and survives an empty/truncated console response.
+  const dir=await fs.mkdtemp(path.join(os.tmpdir(),'studio-ego-')),journal=path.join(dir,'progress.jsonl');
+  const source=`const fs=await import('node:fs/promises');const emit=async e=>await fs.appendFile(${JSON.stringify(journal)},JSON.stringify(e)+"\\n");try{const {runEgoCreatorTask}=await import(${JSON.stringify(workerPath)});await runEgoCreatorTask(${JSON.stringify(input)},{taskSpace:${input.spaceId?'async()=>await claimTaskSpace('+Number(input.spaceId)+')':'async name=>{const existing=(await listTaskSpaces()).find(s=>s.name===name);return existing&&existing.ownership!=="agent"?await claimTaskSpace(existing.id):await taskSpace(name);}'},onEvent:emit});await emit({complete:true});}catch(e){await emit({status:'error',message:e.message||'Ego Lite 执行失败'});throw e;}`;
+  try{return await new Promise((resolve,reject)=>{
     const child=spawn('ego-browser',['nodejs','-e',source],{stdio:['ignore','pipe','pipe']});
-    let pending='',errors='',updates=Promise.resolve(),lastStatus=null;
-    child.stdout.on('data',chunk=>{
-      pending+=chunk.toString();const lines=pending.split('\n');pending=lines.pop();
-      for(const line of lines)if(line.startsWith(EVENT)){
-        try{const event=JSON.parse(line.slice(EVENT.length));lastStatus=event.status;updates=updates.then(()=>onUpdate(event.status,event.message));}catch{errors+='Ego Lite 状态响应无法解析';}
-      }
-    });
+    let errors='',updates=Promise.resolve(),lastStatus=null,offset=0,reading=false,journalUsed=false,complete=false,parseError=null,terminalEvent=null;
+    const receive=event=>{lastStatus=event.status;if(terminalStatuses.has(event.status))terminalEvent=event;else updates=updates.then(()=>onUpdate(event.status,event.message,event));};
+    const reader=eventReader(event=>{if(!journalUsed)receive(event);});
+    const readProgress=async()=>{
+      if(reading)return;reading=true;
+      try{const data=await fs.readFile(journal,'utf8'),end=data.lastIndexOf('\n')+1;
+        for(const line of data.slice(offset,end).split('\n').filter(Boolean)){const event=JSON.parse(line);journalUsed=true;if(event.complete){complete=true;continue;}if(!statuses.has(event.status)||typeof event.message!=='string')throw Error('Ego Lite 进度文件格式错误');receive(event);}offset=end;
+      }catch(e){if(e.code!=='ENOENT')parseError=e;}finally{reading=false;}
+    };
+    const timer=setInterval(()=>{void readProgress();},250);
+    child.stdout.on('data',chunk=>{try{reader.push(chunk);}catch(e){parseError=e;}});
     child.stderr.on('data',chunk=>{errors=(errors+chunk.toString()).slice(-6000);});
-    child.on('error',()=>reject(Error(driverError)));
+    child.on('error',()=>{clearInterval(timer);reject(Error(driverError));});
     child.on('close',async code=>{
-      try{await updates;if(code!==0)throw Error(errors.trim()||driverError);if(!lastStatus)throw Error('Ego Lite 未返回执行状态，请检查浏览器连接。');resolve();}catch(error){reject(error);}
+      clearInterval(timer);while(reading)await wait(10);await readProgress();
+      try{reader.end();await updates;if(parseError)throw parseError;if(lastStatus==='error')throw Error('浏览器执行未完成，请按进度提示检查页面。');if(code!==0)throw Error(errors.trim()||driverError);
+        const allowed=input.kind==='session'?['logged_in','waiting_login','needs_attention']:['draft','filled','needs_attention'];
+        if(!allowed.includes(lastStatus)||(journalUsed&&!complete))throw Error('浏览器任务未返回完整结果；登录状态尚未确认，请重新检查。');
+        await onUpdate(terminalEvent.status,terminalEvent.message,terminalEvent);resolve();
+      }catch(error){reject(error);}
     });
-  });
+  });}finally{await fs.rm(dir,{recursive:true,force:true});}
 }
 export async function runCreatorDraft({platform,title,body,tags,imageFiles,onUpdate}){
   if(!PLATFORM[platform])throw Error('不支持的平台');
   if(process.env.STUDIO_DRAFT_DRIVER==='mock')return runMock({onUpdate});
   return executeEgoTask({kind:'draft',platform,title,body,tags,imageFiles},onUpdate);
 }
-export async function prepareCreatorSession({platform,onUpdate}){
+export async function prepareCreatorSession({platform,onUpdate,spaceId}){
   if(!PLATFORM[platform])throw Error('不支持的平台');
   if(process.env.STUDIO_DRAFT_DRIVER==='mock'){await onUpdate('opening','模拟打开登录页');await onUpdate('waiting_login','模拟检查登录状态');await onUpdate('logged_in','模拟登录校验通过');return;}
-  return executeEgoTask({kind:'session',platform},onUpdate);
+  return executeEgoTask({kind:'session',platform,spaceId},onUpdate);
 }
 export const draftAutomationAvailable=async()=>{
   if(process.env.STUDIO_DRAFT_DRIVER==='mock')return true;

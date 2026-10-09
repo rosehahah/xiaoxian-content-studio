@@ -52,7 +52,7 @@ export function clearDelivery(p) {
 export function seedProject() {
   return {
     id:'github-mac-lesson-01',schema:SCHEMA,revision:0,stage:'content',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),
-    content:{topic:'Mac 满了，项目又不敢删',series:'外行人的 AI 学习笔记',takeaway:'先把能恢复的代码存好，再清理本地空间。',cards:[
+    content:{topic:'Mac 满了，项目又不敢删',series:'',takeaway:'先把能恢复的代码存好，再清理本地空间。',cards:[
       {kind:'cover',eyebrow:'给电脑减负 · 第 01 课',title:'Mac 满了，\n项目不敢删？',body:'我先把代码存好，\n再给电脑腾点空间。',note:'先学会一件小事，就够了。'},
       {kind:'cabinet',eyebrow:'先弄懂',title:'给代码一个\n「存档柜」',body:'GitHub 能保存代码和修改记录。\n以后要接着做，再取回来。',note:'视频、照片和密钥，要另外存好。'},
       {kind:'steps',eyebrow:'只做三步',title:'先存好，\n再考虑删。',body:'让 AI 检查哪些文件该上传\n存到 GitHub 的私有仓库\n重新取回，确认能恢复',note:'密钥、证书、数据库要单独备份。'},
@@ -82,6 +82,7 @@ export function validateProject(p) {
   validatePlanning(p.planning);
   validateCreative(p);
   if(!p.visual || !['sage','ink','rose'].includes(p.visual.theme) || !['airy','compact'].includes(p.visual.layout)) throw new Error('视觉配置错误');
+  if(p.visual.readingStyle!==undefined && !['default','paper','plain','editorial'].includes(p.visual.readingStyle)) throw new Error('内页风格无效');
   if(p.visual.artwork!==undefined){
     if(!p.visual.artwork||typeof p.visual.artwork!=='object'||Array.isArray(p.visual.artwork))throw new Error('素材配置错误');
     for(const [index,id] of Object.entries(p.visual.artwork))if(!/^(0|[1-9]\d*)$/.test(index)||Number(index)>=p.content.cards.length||!ICON_IDS.has(id))throw new Error('素材不存在，请重新选择');
