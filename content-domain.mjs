@@ -1,6 +1,7 @@
 import {createHash} from 'node:crypto';
 import {CONTENT_FORMATS,ensureContentFields,validateContentFields,contentError} from './content-schema.mjs';
 import {platformProfile,profileHash,PROFILE_VERSION} from './content-profiles.mjs';
+import {markdownAssetIds} from './article-render.mjs';
 
 const EDIT_ARTICLE=['storyType','locale','title','digest','bodyMd','assets','coverAssetId','sourceDeps'];
 const EDIT_VARIANT=['channel','format','locale','title','subtitle','digest','bodyMd','assets','coverAssetId','sourceDeps','profileVersion','tags','aiDisclosure','target','cards','visual'];
@@ -42,7 +43,7 @@ function bindDeps(p,deps){
   if(!Array.isArray(deps))fail('事实依赖必须是数组');
   return deps.map(d=>{if(!object(d)||typeof d.factId!=='string')fail('事实依赖需要factId');const f=factById(p,d.factId);if(!f)fail('事实不存在：'+d.factId);const hash=factHash(p,f);if(d.fingerprint!==undefined&&d.fingerprint!==null&&d.fingerprint!==hash)fail('引用事实已变化，请重新核对',409);return {factId:d.factId,fingerprint:hash};});
 }
-function bodyAssetIds(body){return [...String(body||'').matchAll(/!\[[^\]]*\]\(\s*<?asset:([a-zA-Z0-9_-]+)>?(?:\s+["'][^)]*)?\s*\)/g)].map(m=>m[1]);}
+const bodyAssetIds=markdownAssetIds;
 function assetSemantic(a){return {sha256:a?.sha256??null,mimeType:a?.mimeType??null,alt:a?.alt??null,caption:a?.caption??null};}
 function assetsFor(p,refs,cover,body=''){
   const ids=[...refs.map(a=>typeof a==='string'?a:a.assetId),...(cover?[cover]:[]),...bodyAssetIds(body)];

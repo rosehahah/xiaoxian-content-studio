@@ -447,3 +447,46 @@ test('restart recovery keeps unknown external outcomes unresolved and reconciles
   assertNoRemoteSuccess(project);
   assert.deepEqual(await fs.readdir(path.join(directory, 'draft-jobs')), []);
 });
+
+test('HTTP preview, approval and export share nested-image and literal-code semantics', async () => {
+  const literal='`![行内例子](asset:not-registered)`\n\n```markdown\n![围栏例子](asset:not-registered)\n```\n\n\\![转义例子](asset:not-registered)';
+  await mutate('article',{article:{assets:[],sourceDeps:[],bodyMd:'![结果 [旧版]](asset:'+registeredGif.id+')\n\n'+literal}},'PATCH');
+  const first=await preview();assert.equal((first.html.match(/<img\b/g)||[]).length,1);assert.equal(first.rendererVersion,'safe-markdown-v2');
+  await mutate('article-approve',{actor:'user',artifactHash:first.artifactHash});assert.equal(project.runtime.articleApproved,true);
+  const sourceBundle=structuredClone(project.sourceBundle);sourceBundle.assets.find(a=>a.id===registeredGif.id).caption='通过素材编辑修正后的图注';
+  await mutate('sources',{sourceBundle},'PUT');assert.equal(project.runtime.articleApproved,false);assert.equal(project.article.approval,null);
+  const second=await preview();assert.notEqual(second.artifactHash,first.artifactHash);assert.ok(second.html.includes('通过素材编辑修正后的图注'));
+  await mutate('article-approve',{actor:'user',artifactHash:second.artifactHash});
+  const response=await request('/api/projects/'+PROJECT_ID+'/export?format=zip');assert.equal(response.status,200);
+  const zip=await JSZip.loadAsync(Buffer.from(await response.arrayBuffer())),image='assets/'+GIF_SHA+'.gif';
+  assert.deepEqual(await zip.file(image).async('nodebuffer'),GIF_BYTES);assert.equal((await zip.file('article.html').async('string')).includes('src="'+image+'"'),true);
+  assert.ok((await zip.file('article.md').async('string')).endsWith(literal));
+  await refresh();
+  for(const bodyMd of ['`![例子](asset:not-registered)`','```md\n![例子](asset:not-registered)\n```','\\![例子](asset:not-registered)']){
+    await mutate('article',{article:{bodyMd,assets:[],sourceDeps:[]}},'PATCH');const view=await preview();assert.doesNotMatch(view.html,/<img\b|class="article-missing-asset"/);
+    await mutate('article-approve',{actor:'user',artifactHash:view.artifactHash});assert.equal(project.runtime.articleApproved,true);
+    const exported=await request('/api/projects/'+PROJECT_ID+'/export?format=markdown');assert.equal(exported.status,200);assert.ok((await exported.text()).endsWith(bodyMd));
+  }
+  assertNoRemoteSuccess(await refresh());
+});
+
+test('old converter approvals stay stale consistently in preview, runtime and export until explicitly rechecked', async () => {
+  await mutate('channels',{selectedChannels:{domestic:[],overseas:['substack']}},'PATCH');
+  const keys=[{id:'substack-version-check',channel:'substack',format:'article',locale:'en'}];
+  const task=await json('/api/projects/'+PROJECT_ID+'/variant-input?keys='+encodeURIComponent(JSON.stringify(keys)));
+  assert.equal(task.status,200);
+  await mutate('variant-import',{inputFingerprint:task.data.inputFingerprint,keys:task.data.keys,sourceWorkId:project.article.id,variants:[{...keys[0],title:'A synthetic converter check',bodyMd:'Keep the original facts.',assets:[],sourceDeps:[],profileVersion:task.data.profileVersion}]});
+  await approveVariant(keys[0].id);
+  await stopServer();
+  const databasePath=path.join(directory,'projects.json'),database=JSON.parse(await fs.readFile(databasePath,'utf8')),saved=database.find(p=>p.id===PROJECT_ID);
+  saved.article.approval.rendererVersion='safe-markdown-v1';saved.variants.find(v=>v.id===keys[0].id).approval.rendererVersion='safe-markdown-v1';
+  await fs.writeFile(databasePath,JSON.stringify(database),{mode:0o600});await startServer();await refresh();
+  assert.equal(project.runtime.articleApproved,false);assert.equal(project.runtime.variantApproved[keys[0].id],false);
+  const sourceView=await preview(),platformView=await preview(keys[0].id);assert.equal(sourceView.approved,false);assert.equal(platformView.approved,false);
+  await expectError('/api/projects/'+PROJECT_ID+'/export?format=zip',{},409,/审核/);
+  await expectError('/api/projects/'+PROJECT_ID+'/export?format=zip&workId='+keys[0].id,{},409,/审核/);
+  await expectError('/api/projects/'+PROJECT_ID+'/variants/'+keys[0].id+'/approve',{method:'POST',body:{revision:project.revision,actor:'user',artifactHash:platformView.artifactHash}},409,/来源长文/);
+  await mutate('article-approve',{actor:'user',artifactHash:sourceView.artifactHash});assert.equal(project.runtime.articleApproved,true);assert.equal(project.runtime.variantApproved[keys[0].id],false);
+  await approveVariant(keys[0].id);assert.equal((await preview()).approved,true);assert.equal((await preview(keys[0].id)).approved,true);
+  assertNoRemoteSuccess(await refresh());
+});

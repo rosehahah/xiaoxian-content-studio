@@ -63,4 +63,41 @@ test('Markdown-only asset references are hashed, invalidated, and blocked if mis
 test('translated cards with useful page text need no duplicate caption body or assets',()=>{const p=adapted(article(),'cards');patchVariant(p,'linkedin-en',{bodyMd:''});approveVariant(p,'linkedin-en',variantHash(p,p.variants[0]));assert.equal(variantApproved(p,p.variants[0]),true);});
 test('a changed fact used only by cards revokes card approval, preserving the article',()=>{const p=article();p.content.sourceDeps=[{factId:'b',fingerprint:p.sourceBundle.facts.find(f=>f.id==='b').fingerprint}];p.contentApproval={fingerprint:'old-card-text'};p.cardApproval={fingerprint:'old-visual'};const bundle=structuredClone(p.sourceBundle);bundle.facts.find(f=>f.id==='b').statement='仅图卡依赖的事实变化';updateSources(p,bundle);assert.equal(p.contentApproval,null);assert.equal(p.cardApproval,null);assert.equal(articleApproved(p),true);});
 test('inline registry captions affect visual approval but asset display names do not',()=>{const p=article(),bundle=structuredClone(p.sourceBundle);bundle.assets=[{id:'inline',sha256:H,mimeType:'image/png',caption:'原图注'}];updateSources(p,bundle);patchArticle(p,{bodyMd:'![图](asset:inline)'});approveArticle(p,articleHash(p));const before=articleHash(p),next=structuredClone(p.sourceBundle);next.assets[0].caption='准确的新图注';updateSources(p,next);assert.notEqual(articleHash(p),before);assert.equal(p.article.approval,null);});
+for(const [label,pngAlt,gifAlt] of [['ordinary','结果截图','操作动图'],['nested alt','结果 [第一步] 截图','操作 [完整演练] 动图']]){
+ test(`Markdown-only ${label} PNG and GIF captions invalidate the article and its dependent variant`,()=>{
+  const p=article(),bundle=structuredClone(p.sourceBundle);
+  bundle.assets=[{id:'screenshot',sha256:H,mimeType:'image/png',caption:'截图原图注'},{id:'recording',sha256:stableHash('synthetic GIF bytes'),mimeType:'image/gif',caption:'动图原图注'}];
+  updateSources(p,bundle);patchArticle(p,{assets:[],bodyMd:`![${pngAlt}](asset:screenshot)\n\n![${gifAlt}](<asset:recording>)`});approveArticle(p,articleHash(p));adapted(p);
+  assert.deepEqual(p.article.assets,[]);assert.equal(articleApproved(p),true);assert.equal(variantApproved(p,p.variants[0]),true);
+  const before=articleHash(p),beforeVariant=variantHash(p,p.variants[0]),changed=structuredClone(p.sourceBundle);
+  changed.assets.find(a=>a.id==='recording').caption='核对后修正的操作图注';updateSources(p,changed);
+  assert.notEqual(articleHash(p),before,'A visible registry GIF caption is part of the article snapshot');
+  assert.notEqual(variantHash(p,p.variants[0]),beforeVariant,'The adapted work must bind the changed source article');
+  assert.equal(p.article.approval,null);assert.equal(p.variants[0].approval,null);assert.equal(articleApproved(p),false);assert.equal(variantApproved(p,p.variants[0]),false);
+  approveArticle(p,articleHash(p));assert.throws(()=>approveVariant(p,p.variants[0].id,variantHash(p,p.variants[0])),e=>e.status===409);
+  adapted(p);assert.equal(articleApproved(p),true);assert.equal(variantApproved(p,p.variants[0]),true);
+ });
+}
+test('unregistered images with nested alt text cannot receive article or variant approval',()=>{
+ const p=article();patchArticle(p,{assets:[],bodyMd:'![未登记 [第一步] 截图](asset:missing-nested)'});
+ assert.throws(()=>approveArticle(p,articleHash(p)),/未登记素材/);assert.equal(articleApproved(p),false);
+ const q=adapted();patchVariant(q,'linkedin-en',{assets:[],bodyMd:'![Unregistered [step one] image](<asset:missing-nested>)'});
+ assert.throws(()=>approveVariant(q,'linkedin-en',variantHash(q,q.variants[0])),/未登记素材/);assert.equal(variantApproved(q,q.variants[0]),false);
+});
+const imageExampleForms=[
+ ['inline code',id=>'`![图片示例](asset:'+id+')`'],
+ ['fenced code',id=>'```markdown\n![图片示例](asset:'+id+')\n```'],
+ ['escaped image',id=>'\\![图片示例](asset:'+id+')']
+];
+for(const [label,example] of imageExampleForms){
+ test(`${label} image examples need no registration and do not consume registry captions`,()=>{
+  const p=article(),bundle=structuredClone(p.sourceBundle);bundle.assets=[{id:'example-only',sha256:H,mimeType:'image/png',caption:'只在示例中出现'}];updateSources(p,bundle);
+  const bodyMd=example('not-registered')+'\n\n'+example('example-only');patchArticle(p,{assets:[],bodyMd});
+  approveArticle(p,articleHash(p));adapted(p);patchVariant(p,'linkedin-en',{assets:[],bodyMd});approveVariant(p,'linkedin-en',variantHash(p,p.variants[0]));
+  assert.equal(articleApproved(p),true);assert.equal(variantApproved(p,p.variants[0]),true);
+  const before=articleHash(p),beforeVariant=variantHash(p,p.variants[0]),changed=structuredClone(p.sourceBundle);changed.assets[0].caption='示例资源的新图注';updateSources(p,changed);
+  assert.equal(articleHash(p),before,'Text/code examples cannot create an image dependency');assert.equal(variantHash(p,p.variants[0]),beforeVariant);
+  assert.equal(articleApproved(p),true);assert.equal(variantApproved(p,p.variants[0]),true);assert.equal(p.article.bodyMd,bodyMd);
+ });
+}
 test('legacy storage ceilings migrate losslessly without authorizing over-limit publication',()=>{const p=project();p.schema=1;p.platforms.substack={title:'旧'.repeat(1000),body:'x'.repeat(150000),tags:Array.from({length:40},(_,i)=>'tag'+i)};const [next]=migrateProjects([p]);assert.equal(next.variants[0].bodyMd.length,150000);assert.equal(next.variants[0].reviewStatus,'legacy_unreviewed');assert.equal(next.variants[0].approval,null);assert.equal(next.platforms.substack.body,p.platforms.substack.body);});

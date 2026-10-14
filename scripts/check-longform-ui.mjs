@@ -10,6 +10,28 @@ const root=fileURLToPath(new URL('..',import.meta.url));
 const port=14437,origin='http://localhost:'+port;
 const field=name=>'[data-lf-field="'+name+'"]';
 const action=(name,extra='')=>'[data-lf-action="'+name+'"]'+extra;
+
+// The preview is sandboxed. Read its real document through an isolated CDP world;
+// use native Ego pointer/keyboard actions for interaction rather than DOM clicks.
+async function readPreviewDocument(page){
+  const response=await page.cdp('Page.getFrameTree'),frames=[];
+  const collect=tree=>{if(!tree)return;frames.push(tree.frame);for(const child of tree.childFrames||[])collect(child);};
+  collect(response.frameTree||response.result?.frameTree);
+  const previews=frames.filter(frame=>frame?.url==='about:srcdoc');
+  assert.equal(previews.length,1,'长文验收应定位到唯一的安全预览iframe');
+  const world=await page.cdp('Page.createIsolatedWorld',{frameId:previews[0].id,worldName:'xiaoxian-longform-mobile-readonly'});
+  const contextId=world.executionContextId||world.result?.executionContextId;assert.ok(contextId,'预览只读检查需要有效执行上下文');
+  const result=await page.cdp('Runtime.evaluate',{contextId,returnByValue:true,awaitPromise:true,expression:`(async()=>{
+    if(document.readyState==='loading')await new Promise(resolve=>document.addEventListener('DOMContentLoaded',resolve,{once:true}));
+    if(document.fonts)await document.fonts.ready;
+    const tail=[...document.querySelectorAll('p,li,blockquote,figcaption')].find(node=>node.textContent.trim()==='末尾检查点：全文完整保留。');
+    const rect=tail?.getBoundingClientRect(),style=tail?getComputedStyle(tail):null;
+    return {width:innerWidth,height:innerHeight,pageWidth:document.documentElement.scrollWidth,scrollTop:document.scrollingElement?.scrollTop,scrollHeight:document.scrollingElement?.scrollHeight,tail:tail?{text:tail.textContent,rect:rect.toJSON(),visible:rect.width>0&&rect.height>0&&rect.top>=-1&&rect.bottom<=innerHeight+1&&style.visibility!=='hidden'&&style.display!=='none'}:null};
+  })()`});
+  assert.ok(!result.exceptionDetails,JSON.stringify(result.exceptionDetails));
+  const value=result.result?.value||result.value;assert.ok(value?.tail,'实际预览文档应保留末尾检查点');return value;
+}
+
 export async function checkLongformUI(task,output,source={}){
   const packageSha=source.packageSha||process.env.STUDIO_PACKAGE_SHA;
   const page=task.page('p1');await fs.mkdir(output,{recursive:true});
@@ -30,20 +52,71 @@ export async function checkLongformUI(task,output,source={}){
   const gifPath=path.join(output,'synthetic-ui.gif');await fs.writeFile(gifPath,gif);await page.setInputFiles('[data-lf-upload]',[gifPath]);await page.waitForSelector('.lf-asset');
   let p=await get();const asset=p.sourceBundle.assets[0];assert.equal(asset.mimeType,'image/gif');passed('无图卡新建长文、保存材料事实与GIF');
   await tab('article');await page.click('.lf-dependencies summary');await page.click('[data-lf-fact-dep]');
-  const body='# 先保留一个可检查的结果\n\n这是合成测试，不代表真实使用效果。\n\n## 操作步骤\n\n1. 保存资料。\n2. 核对结果。\n\n> 结果应当能重新打开。\n\n```js\nconst syntheticLongLine = "'+ 'local_only_'.repeat(30)+'";\n```\n\n| 输入 | 成品 |\n| --- | --- |\n| 原始材料 | 可检查文稿 |\n\n![合成操作](asset:'+asset.id+')\n\n末尾检查点：全文完整保留。';
+  const body='# 先保留一个可检查的结果\n\n这是合成测试，不代表真实使用效果。\n\n## 操作步骤\n\n1. 保存资料。\n2. 核对结果。\n\n> 结果应当能重新打开。\n\n```js\nconst syntheticLongLine = "'+ 'local_only_'.repeat(30)+'";\n```\n\n| 输入 | 成品 |\n| --- | --- |\n| 原始材料 | 可检查文稿 |\n\n![合成 [操作]](asset:'+asset.id+')\n\n`![引用语法](asset:example)`\n\n```md\n![引用语法](asset:example)\n```\n\n\\![转义引用](asset:example)\n\n末尾检查点：全文完整保留。';
   await page.fill(field('article-bodyMd'),body);await save();
   await page.click(action('article-preview'));await page.waitForSelector('[data-lf-article-frame]');
   assert.equal(await page.evaluate(()=>document.querySelector('[data-lf-action="article-approve"]').disabled),true);
   await page.click('[data-lf-article-ack]');await page.click(action('article-approve'));await page.waitForFunction(()=>document.querySelector('[data-lf-article-badge]')?.textContent==='本版长文已审核');
   p=await get();assert.equal(p.runtime.articleApproved,true);assert.equal(p.cardApproval,null);passed('经验教程长文独立预览与审核');
   await page.screenshot({path:path.join(output,'longform-desktop.png'),fullPage:true});
-  for(const width of [375,390,430]){
-    await page.cdp('Emulation.setDeviceMetricsOverride',{width,height:932,deviceScaleFactor:1,mobile:true});await page.click(action('preview-width','[data-width="'+width+'"]'));
+  run.mobileViewports=[];
+  for(const {width,height} of [{width:375,height:812},{width:390,height:844},{width:430,height:932}]){
+    const size=width+'x'+height;
+    await page.cdp('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:true});await page.click(action('preview-width','[data-width="'+width+'"]'));
+    await page.waitForFunction(({width,height})=>innerWidth===width&&innerHeight===height,{width,height});
     await page.waitForFunction(()=>{const f=document.querySelector('[data-lf-article-frame]'),s=document.querySelector('[data-lf-preview-stage]');return f&&s&&f.getBoundingClientRect().right<=s.getBoundingClientRect().right+1;});
-    const bounds=await page.evaluate(()=>{const f=document.querySelector('[data-lf-article-frame]'),s=document.querySelector('[data-lf-preview-stage]');return {viewport:innerWidth,page:document.documentElement.scrollWidth,frame:f.getBoundingClientRect().toJSON(),stage:s.getBoundingClientRect().toJSON(),fullText:f.srcdoc.includes('末尾检查点：全文完整保留。'),gif:f.srcdoc.includes('image/gif')||f.srcdoc.includes('/assets/')};});
-    assert.ok(bounds.page<=width);assert.ok(bounds.frame.left>=bounds.stage.left);assert.ok(bounds.frame.right<=bounds.stage.right+1);assert.equal(bounds.fullText,true);assert.equal(bounds.gif,true);
-    await fs.writeFile(path.join(output,'mobile-'+width+'.json'),JSON.stringify(bounds,null,2));await page.screenshot({path:path.join(output,'longform-mobile-'+width+'.png'),fullPage:true});const frame=await page.evaluate(()=>document.querySelector('[data-lf-article-frame]').getBoundingClientRect().toJSON());await page.mouse.move(frame.x+frame.width/2,Math.min(800,frame.y+frame.height/2));await page.mouse.wheel(0,1000,{label:'检查长文末尾'});await page.screenshot({path:path.join(output,'longform-mobile-'+width+'-tail.png'),fullPage:true});
-  }passed('375/390/430完整预览与操作区，无右侧裁切');
+    const bounds=await page.evaluate(()=>{const f=document.querySelector('[data-lf-article-frame]'),s=document.querySelector('[data-lf-preview-stage]');return {viewport:innerWidth,viewportHeight:innerHeight,page:document.documentElement.scrollWidth,body:document.body.scrollWidth,frame:f.getBoundingClientRect().toJSON(),stage:s.getBoundingClientRect().toJSON(),logicalWidth:Number(s.dataset.logicalWidth),fitScale:Number(s.dataset.fitScale),fullText:f.srcdoc.includes('末尾检查点：全文完整保留。'),gif:f.srcdoc.includes('image/gif')||f.srcdoc.includes('/assets/')};});
+    assert.equal(bounds.viewport,width);assert.equal(bounds.viewportHeight,height);assert.equal(bounds.logicalWidth,width);
+    assert.ok(bounds.page<=width+1);assert.ok(bounds.body<=width+1);assert.ok(bounds.frame.left>=bounds.stage.left);assert.ok(bounds.frame.right<=bounds.stage.right+1);assert.equal(bounds.fullText,true);assert.equal(bounds.gif,true);
+    await page.screenshot({path:path.join(output,'longform-mobile-'+size+'.png'),fullPage:true});
+    await fs.copyFile(path.join(output,'longform-mobile-'+size+'.png'),path.join(output,'longform-mobile-'+width+'.png'));
+
+    // Scroll the real iframe with the pointer inside its visible intersection.
+    await page.click('[data-lf-article-frame]');
+    let tail=await readPreviewDocument(page),wheelActions=0;
+    for(;!tail.tail.visible&&wheelActions<6;wheelActions++){
+      const pointer=await page.evaluate(()=>{const r=document.querySelector('[data-lf-article-frame]').getBoundingClientRect();return {x:(Math.max(0,r.left)+Math.min(innerWidth,r.right))/2,y:(Math.max(0,r.top)+Math.min(innerHeight,r.bottom))/2,visibleWidth:Math.min(innerWidth,r.right)-Math.max(0,r.left),visibleHeight:Math.min(innerHeight,r.bottom)-Math.max(0,r.top)};});
+      assert.ok(pointer.visibleWidth>20&&pointer.visibleHeight>40,JSON.stringify(pointer));
+      await page.mouse.move(pointer.x,pointer.y,{label:'定位长文预览内'});await page.mouse.wheel(0,1000,{label:'滚动核对正文末尾'});
+      tail=await readPreviewDocument(page);
+    }
+    assert.equal(tail.width,width,'iframe内部排版宽度不应被手机容器改变');
+    assert.ok(tail.pageWidth<=tail.width+1,'代码与表格应局部滚动，不撑破iframe正文');
+    assert.equal(tail.tail.visible,true,'实际正文尾段必须滚动可达并完整可见');
+    const tailScreen=await page.evaluate(({tail,logicalWidth})=>{const r=document.querySelector('[data-lf-article-frame]').getBoundingClientRect(),scale=r.width/logicalWidth;return {viewportHeight:innerHeight,frame:r.toJSON(),tailTop:r.top+tail.top*scale,tailBottom:r.top+tail.bottom*scale,scale};},{tail:tail.tail.rect,logicalWidth:tail.width});
+    assert.ok(tailScreen.tailTop>=-1&&tailScreen.tailBottom<=height+1,JSON.stringify(tailScreen));
+    await fs.writeFile(path.join(output,'longform-mobile-'+size+'-tail-snapshot.txt'),await page.snapshot());
+    await page.screenshot({path:path.join(output,'longform-mobile-'+size+'-tail.png')});
+    await fs.copyFile(path.join(output,'longform-mobile-'+size+'-tail.png'),path.join(output,'longform-mobile-'+width+'-tail.png'));
+
+    // Native clicks prove the acknowledgement and approval controls are reachable.
+    if(await page.evaluate(()=>document.querySelector('[data-lf-article-ack]').checked))await page.click('[data-lf-article-ack]');
+    assert.equal(await page.evaluate(()=>document.querySelector('[data-lf-action="article-approve"]').disabled),true);
+    await page.click('[data-lf-article-ack]');
+    await page.waitForFunction(()=>!document.querySelector('[data-lf-action="article-approve"]')?.disabled);
+    const approveBefore=await page.evaluate(()=>document.querySelector('[data-lf-action="article-approve"]').getBoundingClientRect().toJSON());
+    await page.click(action('article-approve'));await page.waitForFunction(()=>document.querySelector('[data-lf-article-badge]')?.textContent==='本版长文已审核'&&document.querySelector('[data-lf-save-state]')?.textContent==='已保存在本机');
+    const reviewed=await get();assert.equal(reviewed.runtime.articleApproved,true);
+    await page.screenshot({path:path.join(output,'longform-mobile-'+size+'-controls.png')});
+
+    // Download a real local ZIP at each phone size; clickability alone is insufficient.
+    const exportPending=page.waitForEvent('download',{timeout:60000});
+    await page.click('a[href*="export?format=zip"] >> nth=0');const mobileDownload=await exportPending;
+    const mobileZipPath=path.join(output,'source-article-'+size+'.zip');await mobileDownload.saveAs(mobileZipPath);
+    const mobileZip=await JSZip.loadAsync(await fs.readFile(mobileZipPath));
+    const mobileHTML=await mobileZip.file('article.html').async('string');assert.ok(mobileHTML.includes('末尾检查点：全文完整保留。'));assert.equal((mobileHTML.match(/<img\b/g)||[]).length,1);assert.equal(mobileHTML.includes('class="article-missing-asset"'),false);assert.ok((await mobileZip.file('article.md').async('string')).includes('`![引用语法](asset:example)`'));
+    assert.deepEqual(await mobileZip.file('assets/'+asset.sha256+'.gif').async('nodebuffer'),gif);
+    const controls=await page.evaluate(()=>{const selector='a[href*="export?format=zip"]',a=document.querySelector(selector),r=a.getBoundingClientRect(),x=Math.max(1,Math.min(innerWidth-1,r.left+r.width/2)),y=Math.max(1,Math.min(innerHeight-1,r.top+r.height/2)),hit=document.elementFromPoint(x,y);return {viewport:innerWidth,height:innerHeight,page:document.documentElement.scrollWidth,body:document.body.scrollWidth,export:r.toJSON(),exportHit:hit===a||a.contains(hit),notice:document.querySelector('[data-lf-notice]')?.textContent};});
+    assert.ok(controls.page<=width+1&&controls.body<=width+1,JSON.stringify(controls));
+    assert.equal(controls.exportHit,true,'导出入口应在实际手机视口可命中');
+    await page.screenshot({path:path.join(output,'longform-mobile-'+size+'-export.png')});
+    const evidence={...bounds,size,tail:{...tail,screen:tailScreen,wheelActions},approval:{clicked:true,approved:true,revision:reviewed.revision,buttonBeforeClick:approveBefore},export:{clicked:true,zip:path.basename(mobileZipPath),fullArticleVerified:true,gifBytesVerified:true,...controls}};
+    await fs.writeFile(path.join(output,'mobile-'+size+'.json'),JSON.stringify(evidence,null,2));
+    await fs.writeFile(path.join(output,'mobile-'+width+'.json'),JSON.stringify(evidence,null,2));
+    run.mobileViewports.push({width,height,status:'pass',evidence:'mobile-'+size+'.json',zip:path.basename(mobileZipPath)});
+    await fs.writeFile(path.join(output,'results.json'),JSON.stringify({...run,status:'running',results},null,2));
+    passed(size+'实际尾段可达、审核与ZIP导出可操作、根页面无横向溢出');
+  }passed('375×812 / 390×844 / 430×932完整预览与操作区可达');
   await page.cdp('Emulation.setDeviceMetricsOverride',{width:1440,height:1050,deviceScaleFactor:1,mobile:false});
   const downloadPromise=page.waitForEvent('download');await page.click('a[href*="export?format=zip"] >> nth=0');const download=await downloadPromise;const zipPath=path.join(output,'source-article.zip');await download.saveAs(zipPath);
   const zip=await JSZip.loadAsync(await fs.readFile(zipPath));assert.ok((await zip.file('article.html').async('string')).includes('末尾检查点'));assert.deepEqual(await zip.file('assets/'+asset.sha256+'.gif').async('nodebuffer'),gif);passed('真实UI下载离线包，全文和GIF字节完整');
@@ -57,12 +130,12 @@ export async function checkLongformUI(task,output,source={}){
   for(const channel of ['substack','linkedin'])await page.click('[data-lf-channel="'+channel+'"]');await page.selectOption('[data-lf-format="linkedin"]','cards');await save();
   await page.click('.lf-task summary');await page.click(action('prepare-task','[data-kind="overseas"]'));await page.waitForFunction(()=>document.querySelector('[data-lf-task-output="overseas"]')?.value.includes('所选平台档案'));
   p=await get();const keys=[{channel:'substack',format:'article',locale:'en-US'},{channel:'linkedin',format:'cards',locale:'en-US'}];const input=await (await fetch(origin+'/api/projects/'+p.id+'/variant-input?keys='+encodeURIComponent(JSON.stringify(keys)))).json();
-  const variants=input.keys.map(k=>({...k,profileVersion:input.profileVersion,title:k.channel==='substack'?'A working version you can inspect':'Make the result easy to check',bodyMd:k.channel==='substack'?'A synthetic walkthrough with evidence, tradeoffs, and steps.\n\nCheck the output before scaling the workflow.':'One practical habit: save and inspect a complete result.',assets:[],sourceDeps:p.article.sourceDeps,...(k.format==='cards'?{cards:[{kind:'editorial',eyebrow:'SYNTHETIC QA',title:'Keep a checkable result',body:'Save the input.\nInspect the output.\nKeep evidence of what changed.',note:'Local test fixture only'}],visual:{theme:'sage',layout:'airy'}}:{})}));
+  const variants=input.keys.map(k=>({...k,profileVersion:input.profileVersion,title:k.channel==='substack'?'A working version you can inspect':'Make the result easy to check',bodyMd:k.channel==='substack'?'A synthetic walkthrough with evidence, tradeoffs, and steps.\n\n![Synthetic [demo]](asset:'+asset.id+')\n\n`![Example](asset:example)`\n\nCheck the output before scaling the workflow.':'One practical habit: save and inspect a complete result.',assets:[],sourceDeps:p.article.sourceDeps,...(k.format==='cards'?{cards:[{kind:'editorial',eyebrow:'SYNTHETIC QA',title:'Keep a checkable result',body:'Save the input.\nInspect the output.\nKeep evidence of what changed.',note:'Local test fixture only'}],visual:{theme:'sage',layout:'airy'}}:{})}));
   // Keep automatic wheel input outside the scrollable task-output textarea.
   await page.mouse.move(900,600,{label:'准备导入平台结果'});
   await page.fill('[data-lf-import="overseas"]',JSON.stringify({revision:input.revision,inputFingerprint:input.inputFingerprint,keys:input.keys,sourceWorkId:input.sourceWorkId,variants}));await page.click(action('import-result','[data-kind="overseas"]'));await page.waitForSelector('[data-lf-variant-select]');
   p=await get();assert.equal(p.variants.length,2);assert.deepEqual(p.selectedChannels.domestic,['wechat']);assert.deepEqual(p.selectedChannels.overseas,['substack','linkedin']);assert.ok(p.variants.every(v=>!v.approval));passed('海外独立选择，平台任务与JSON导入，不自动审核');
-  for(const variant of variants){await page.selectOption('[data-lf-variant-select]',variant.id);await page.click('[data-lf-variant-ack]');await page.click(action('variant-approve'));await page.waitForFunction(()=>document.querySelector('[data-lf-variant-badge]')?.textContent==='本版已审核');}
+  for(const variant of variants){await page.selectOption('[data-lf-variant-select]',variant.id);if(variant.channel==='substack'){await page.click('.lf-variant-reading summary');const reading=await page.evaluate(()=>document.querySelector('[data-lf-variant-preview]').srcdoc);assert.equal((reading.match(/<img\b/g)||[]).length,1);assert.ok(reading.includes('alt="Synthetic [demo]"'));assert.ok(reading.includes('<code>![Example](asset:example)</code>'));}await page.click('[data-lf-variant-ack]');await page.click(action('variant-approve'));await page.waitForFunction(()=>document.querySelector('[data-lf-variant-badge]')?.textContent==='本版已审核');}
   await tab('delivery');const cardId=variants.find(v=>v.format==='cards').id;await page.selectOption('[data-lf-delivery-variant]',cardId);
   const pngDownload=page.waitForEvent('download',{timeout:60000});await page.click(action('export-variant'));const cardDownload=await pngDownload;await cardDownload.saveAs(path.join(output,'english-cards.zip'));
   const cardsZip=await JSZip.loadAsync(await fs.readFile(path.join(output,'english-cards.zip'))),png=await cardsZip.file('images/01.png')?.async('nodebuffer');

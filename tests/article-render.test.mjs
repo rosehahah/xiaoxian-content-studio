@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
-import {renderMarkdown, renderArticleDocument} from '../article-render.mjs';
+import {renderMarkdown, renderArticleDocument,markdownImageNodes,markdownAssetIds,rewriteMarkdownAssetImages} from '../article-render.mjs';
 
 const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j6WQAAAAASUVORK5CYII=';
 const GIF = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
@@ -209,4 +209,52 @@ test('renderer stays browser portable and the offline document has no script, ex
   const html = renderArticleDocument({title: '离线文章', bodyMd: '正文'});
   assert.doesNotMatch(html, /<script\b|<link\b|@import|url\(/i);
   assertNoExecutableTags(html);
+});
+
+test('image nodes follow rendered blocks and inline nesting, with original destination spans',()=>{
+  const source=[
+    '开头正文',
+    '![结果 [第一版]](asset:proof "原图注")',
+    '',
+    '> ![引用](<asset:quoted>)',
+    '',
+    '- **![列表](asset:listed)**',
+    '',
+    '[![链接内图](asset:linked)](https://example.com)',
+    '',
+    '| 正文 |',
+    '| --- |',
+    '| ![表格](asset:table) | ![不显示的额外列](asset:hidden) |',
+    '',
+    '![![alt内部不是图片](asset:inner)](asset:outer)',
+    '',
+    '\t![原有缩进语义](asset:indented)',
+    '',
+    '`![行内示例](asset:code)`',
+    '',
+    '```md',
+    '![围栏示例](asset:fenced)',
+    '```',
+    '',
+    '\\![转义示例](asset:escaped)',
+    '',
+    '![重复](asset:proof)'
+  ].join('\r\n');
+  const expected=['proof','quoted','listed','linked','table','outer','indented','proof'];
+  const nodes=markdownImageNodes(source);assert.deepEqual(markdownAssetIds(source),expected);
+  assert.equal(nodes.length,expected.length,'Standalone lookahead must not collect duplicate nodes');
+  for(const [index,node]of nodes.entries())assert.equal(source.slice(node.targetStart,node.targetEnd),'asset:'+expected[index]);
+  const registry=[...new Set(expected)].map(id=>({id,mimeType:'image/png'}));
+  assert.equal((renderMarkdown(source,{assets:registry,assetUrl:()=>PNG}).match(/<img\b/g)||[]).length,nodes.length);
+  const rewritten=rewriteMarkdownAssetImages(source,id=>'assets/'+id+'.png');
+  let expectedText=source;for(const node of nodes.toReversed())expectedText=expectedText.slice(0,node.targetStart)+'assets/'+node.target.slice(6)+'.png'+expectedText.slice(node.targetEnd);
+  assert.equal(rewritten,expectedText);for(const id of['hidden','inner','code','fenced','escaped'])assert.ok(rewritten.includes('asset:'+id));
+  assert.ok(rewritten.includes('\r\n\t![原有缩进语义](assets/indented.png)'));
+});
+
+test('image rewriting keeps escaped titles, alt text and identical code examples intact',()=>{
+  const image='![结果 \\] [旧版]](<asset:proof> "说 \\"原样\\" 的图注")';
+  const source=image+'\n\n`'+image+'`\n\n~~~markdown\n'+image+'\n~~~\n\n\\'+image;
+  assert.deepEqual(markdownAssetIds(source),['proof']);
+  assert.equal(rewriteMarkdownAssetImages(source,()=> 'assets/proof.gif'),image.replace('asset:proof','assets/proof.gif')+source.slice(image.length));
 });

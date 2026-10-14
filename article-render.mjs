@@ -72,7 +72,7 @@ function safeAssetUrl(value, mime, allowHttp) {
   return value;
 }
 
-function createContext(assets, assetUrl) {
+function createContext(assets, assetUrl, onImage) {
   const registry = new Map();
   for (const entry of Array.isArray(assets) ? assets : []) {
     if (!entry || typeof entry !== 'object' || !ASSET_ID.test(plain(entry.id))) continue;
@@ -81,7 +81,7 @@ function createContext(assets, assetUrl) {
     const mime = plain(entry.mimeType || entry.mime).toLowerCase();
     registry.set(entry.id, RASTER_MIMES.has(mime) ? {...entry, mime} : null);
   }
-  return {registry, assetUrl, resolved: new Map()};
+  return {registry, assetUrl, onImage, resolved: new Map()};
 }
 
 function resolveImage(target, context) {
@@ -104,6 +104,35 @@ function resolveImage(target, context) {
 
 function unescapeMarkdown(value) {
   return value.replace(/\\([!"#$%&'()*+,\-./:;<=>?@[\\\]^_`{|}~])/g, '$1');
+}
+
+// Keep original character positions while block parsing removes list/quote
+// prefixes and inline parsing descends into formatting. All image consumers
+// use this renderer's actual image nodes, including their destination spans.
+function sliceSource(source, start = 0, end = source.text.length) {
+  return {text: source.text.slice(start, end), positions: source.positions.slice(start, end)};
+}
+function trimSource(source) {
+  const start = source.text.length - source.text.trimStart().length;
+  return sliceSource(source, start, source.text.trimEnd().length);
+}
+function joinSources(sources) {
+  return {text: sources.map(s => s.text).join('\n'), positions: sources.flatMap((s, i) => i ? [-1].concat(s.positions) : s.positions)};
+}
+function sourceLines(markdown) {
+  const original = plain(markdown), lines = [];
+  let offset = 0;
+  for (const raw of original.split(/\r\n?|\n/)) {
+    const tabs = /^\t*/.exec(raw)[0].length;
+    const text = '    '.repeat(tabs) + raw.slice(tabs), positions = [];
+    for (let i = 0; i < raw.length; i++) {
+      for (let n = 0; n < (i < tabs ? 4 : 1); n++) positions.push(offset + i);
+    }
+    lines.push({text, positions});
+    offset += raw.length;
+    offset += original.startsWith('\r\n', offset) ? 2 : 1;
+  }
+  return lines;
 }
 
 // Pair brackets once so many unmatched '[' characters do not cause quadratic
@@ -131,10 +160,12 @@ function readDestination(source, start) {
     if ((char === '"' || char === "'") && /\s/.test(source[i - 1])) { quote = char; continue; }
     if (char === '(') depth++;
     if (char === ')' && --depth === 0) {
-      const inside = source.slice(start + 1, i).trim();
+      const rawInside = source.slice(start + 1, i), inside = rawInside.trim();
       const match = /^(?:<([^<>]*)>|([^\s]+))(?:\s+(?:"((?:\\.|[^"\\])*)"|'((?:\\.|[^'\\])*)'))?$/.exec(inside);
       if (!match) return null;
-      return {target: unescapeMarkdown(match[1] ?? match[2]), title: unescapeMarkdown(match[3] ?? match[4] ?? ''), end: i + 1};
+      const rawTarget = match[1] ?? match[2];
+      const targetStart = start + 1 + rawInside.length - rawInside.trimStart().length + (match[1] !== undefined ? 1 : 0);
+      return {target: unescapeMarkdown(rawTarget), title: unescapeMarkdown(match[3] ?? match[4] ?? ''), targetStart, targetEnd: targetStart + rawTarget.length, end: i + 1};
     }
   }
   return null;
@@ -153,7 +184,16 @@ function imageHtml(label, destination, context, block) {
   return `<span class="article-inline-image">${image}${caption ? `<span class="article-caption">${escapeHtml(caption)}</span>` : ''}</span>`;
 }
 
-function renderInline(source, context, depth = 0, allowLinks = true) {
+function emitImage(source, start, close, destination, context, block) {
+  const label = source.text.slice(start + 2, close);
+  context.onImage?.({label, target: destination.target, title: destination.title,
+    start: source.positions[start], end: source.positions[destination.end - 1] + 1,
+    targetStart: source.positions[destination.targetStart], targetEnd: source.positions[destination.targetEnd - 1] + 1});
+  return imageHtml(label, destination, context, block);
+}
+
+function renderInline(input, context, depth = 0, allowLinks = true) {
+  const source = input.text;
   if (depth > MAX_DEPTH) return escapeHtml(source);
   const pairs = bracketPairs(source);
   let html = '';
@@ -185,10 +225,10 @@ function renderInline(source, context, depth = 0, allowLinks = true) {
       const destination = readDestination(source, close + 1);
       if (destination) {
         const label = source.slice(open + 1, close);
-        if (image) html += imageHtml(label, destination, context, false);
+        if (image) html += emitImage(input, i, close, destination, context, false);
         else {
           const href = allowLinks && safeLinkUrl(destination.target);
-          const inner = renderInline(label, context, depth + 1, false);
+          const inner = renderInline(sliceSource(input, open + 1, close), context, depth + 1, false);
           html += href ? `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer"${destination.title ? ` title="${escapeHtml(destination.title)}"` : ''}>${inner}</a>` : inner;
         }
         i = destination.end; continue;
@@ -207,7 +247,7 @@ function renderInline(source, context, depth = 0, allowLinks = true) {
       const close = source.indexOf(delimiter, i + delimiter.length);
       if (close > i + delimiter.length && !/\s/.test(source[i + delimiter.length]) && !/\s/.test(source[close - 1])) {
         const tag = delimiter.length === 1 ? 'em' : delimiter === '~~' ? 'del' : 'strong';
-        html += `<${tag}>${renderInline(source.slice(i + delimiter.length, close), context, depth + 1, allowLinks)}</${tag}>`;
+        html += `<${tag}>${renderInline(sliceSource(input, i + delimiter.length, close), context, depth + 1, allowLinks)}</${tag}>`;
         i = close + delimiter.length; continue;
       }
     }
@@ -230,71 +270,71 @@ function fenceMarker(line) {
   return {marker: match[1], info: match[2].trim()};
 }
 
-function splitTableRow(line) {
+function splitTableRow(source) {
+  const line = source.text;
   const cells = [];
-  let cell = '', ticks = 0;
+  let start = 0, ticks = 0;
   for (let i = 0; i < line.length; i++) {
-    if (line[i] === '\\' && i + 1 < line.length) { cell += line[i] + line[++i]; continue; }
+    if (line[i] === '\\' && i + 1 < line.length) { i++; continue; }
     if (line[i] === '`') {
       let count = 1;
       while (line[i + count] === '`') count++;
       if (!ticks) ticks = count;
       else if (ticks === count) ticks = 0;
-      cell += '`'.repeat(count); i += count - 1; continue;
+      i += count - 1; continue;
     }
-    if (line[i] === '|' && !ticks) { cells.push(cell.trim()); cell = ''; }
-    else cell += line[i];
+    if (line[i] === '|' && !ticks) { cells.push(trimSource(sliceSource(source, start, i))); start = i + 1; }
   }
-  cells.push(cell.trim());
+  cells.push(trimSource(sliceSource(source, start)));
   if (line.trimStart().startsWith('|')) cells.shift();
   if (line.trimEnd().endsWith('|')) cells.pop();
   return cells;
 }
 
 function tableHeader(lines, index) {
-  if (index + 1 >= lines.length || !lines[index].includes('|')) return null;
+  if (index + 1 >= lines.length || !lines[index].text.includes('|')) return null;
   const cells = splitTableRow(lines[index]), separators = splitTableRow(lines[index + 1]);
-  if (!cells.length || cells.length > 64 || cells.length !== separators.length || !separators.every(cell => /^:?-{3,}:?$/.test(cell))) return null;
-  return {cells, alignments: separators.map(cell => cell.startsWith(':') && cell.endsWith(':') ? 'center' : cell.endsWith(':') ? 'right' : 'left')};
+  if (!cells.length || cells.length > 64 || cells.length !== separators.length || !separators.every(cell => /^:?-{3,}:?$/.test(cell.text))) return null;
+  return {cells, alignments: separators.map(cell => cell.text.startsWith(':') && cell.text.endsWith(':') ? 'center' : cell.text.endsWith(':') ? 'right' : 'left')};
 }
 
 function isBlockStart(lines, index) {
-  const line = lines[index];
+  const line = lines[index].text;
   return !line.trim() || !!fenceMarker(line) || /^ {0,3}#{1,6}[ \t]+/.test(line) || /^ {0,3}>/.test(line) ||
     !!listMarker(line) || /^ {0,3}(?:(?:\*\s*){3,}|(?:-\s*){3,}|(?:_\s*){3,})$/.test(line) || !!tableHeader(lines, index);
 }
 
-function standaloneImage(line, context) {
-  const source = line.trim();
-  if (!source.startsWith('![')) return null;
-  const close = bracketPairs(source).get(1);
+function standaloneImage(line) {
+  const source = trimSource(line);
+  if (!source.text.startsWith('![')) return null;
+  const close = bracketPairs(source.text).get(1);
   if (close === undefined) return null;
-  const destination = readDestination(source, close + 1);
-  if (!destination || destination.end !== source.length) return null;
-  return imageHtml(source.slice(2, close), destination, context, true);
+  const destination = readDestination(source.text, close + 1);
+  if (!destination || destination.end !== source.text.length) return null;
+  return {source, close, destination};
 }
 
 function renderList(lines, index, context, depth) {
-  const first = listMarker(lines[index]), tag = first.ordered ? 'ol' : 'ul';
+  const first = listMarker(lines[index].text), tag = first.ordered ? 'ol' : 'ul';
   const items = [];
   let cursor = index;
   while (cursor < lines.length) {
-    const marker = listMarker(lines[cursor]);
+    const marker = listMarker(lines[cursor].text);
     if (!marker || marker.indent !== first.indent || marker.ordered !== first.ordered) break;
-    const itemLines = [marker.content];
+    const itemLines = [sliceSource(lines[cursor], marker.contentIndent)];
     cursor++;
     let afterBlank = false;
     while (cursor < lines.length) {
-      const line = lines[cursor], next = listMarker(line);
+      const line = lines[cursor].text, next = listMarker(line);
       if (next && next.indent <= first.indent) break;
-      if (!line.trim()) { itemLines.push(''); cursor++; afterBlank = true; continue; }
+      if (!line.trim()) { itemLines.push(sliceSource(lines[cursor], line.length)); cursor++; afterBlank = true; continue; }
       const indent = /^ */.exec(line)[0].length;
       if (indent <= first.indent && (afterBlank || isBlockStart(lines, cursor))) break;
-      if (indent > first.indent) itemLines.push(line.slice(Math.min(marker.contentIndent, indent)));
-      else itemLines.push(line); // A nonblank lazy continuation belongs to the item.
+      if (indent > first.indent) itemLines.push(sliceSource(lines[cursor], Math.min(marker.contentIndent, indent)));
+      else itemLines.push(lines[cursor]); // A nonblank lazy continuation belongs to the item.
       cursor++; afterBlank = false;
     }
-    while (itemLines.length && !itemLines.at(-1)?.trim()) itemLines.pop();
+    while (itemLines.length && !itemLines.at(-1)?.text.trim()) itemLines.pop();
     const body = renderBlocks(itemLines, context, depth + 1);
     items.push(`<li>${body}</li>`);
   }
@@ -303,17 +343,17 @@ function renderList(lines, index, context, depth) {
 }
 
 function renderBlocks(lines, context, depth = 0) {
-  if (depth > MAX_DEPTH) return `<p>${escapeHtml(lines.join('\n'))}</p>`;
+  if (depth > MAX_DEPTH) return `<p>${escapeHtml(lines.map(line => line.text).join('\n'))}</p>`;
   const output = [];
   for (let i = 0; i < lines.length;) {
-    const line = lines[i];
+    const line = lines[i].text;
     if (!line.trim()) { i++; continue; }
     const fence = fenceMarker(line);
     if (fence) {
       const code = [], character = fence.marker[0];
       const closing = new RegExp(`^ {0,3}${character === '`' ? '`' : '~'}{${fence.marker.length},}\\s*$`);
       i++;
-      while (i < lines.length && !closing.test(lines[i])) code.push(lines[i++]);
+      while (i < lines.length && !closing.test(lines[i].text)) code.push(lines[i++].text);
       if (i < lines.length) i++;
       const language = /^[A-Za-z0-9_-]{1,40}$/.test(fence.info.split(/\s/)[0]) ? fence.info.split(/\s/)[0] : '';
       output.push(`<div class="article-code-scroll" tabindex="0" role="region" aria-label="代码"><pre><code${language ? ` class="language-${language}"` : ''}>${escapeHtml(code.join('\n'))}</code></pre></div>`);
@@ -322,16 +362,20 @@ function renderBlocks(lines, context, depth = 0) {
     const heading = /^ {0,3}(#{1,6})[ \t]+(.*)$/.exec(line);
     if (heading) {
       const level = heading[1].length;
-      output.push(`<h${level}>${renderInline(heading[2].replace(/[ \t]+#+[ \t]*$/, ''), context)}</h${level}>`); i++; continue;
+      const content = sliceSource(lines[i], line.length - heading[2].length);
+      output.push(`<h${level}>${renderInline(sliceSource(content, 0, content.text.replace(/[ \t]+#+[ \t]*$/, '').length), context)}</h${level}>`); i++; continue;
     }
-    if (i + 1 < lines.length && /^ {0,3}(?:=+|-+)\s*$/.test(lines[i + 1]) && !listMarker(line) && !/^ {0,3}>/.test(line)) {
-      const level = lines[i + 1].trim()[0] === '=' ? 1 : 2;
-      output.push(`<h${level}>${renderInline(line.trim(), context)}</h${level}>`); i += 2; continue;
+    if (i + 1 < lines.length && /^ {0,3}(?:=+|-+)\s*$/.test(lines[i + 1].text) && !listMarker(line) && !/^ {0,3}>/.test(line)) {
+      const level = lines[i + 1].text.trim()[0] === '=' ? 1 : 2;
+      output.push(`<h${level}>${renderInline(trimSource(lines[i]), context)}</h${level}>`); i += 2; continue;
     }
     if (/^ {0,3}(?:(?:\*\s*){3,}|(?:-\s*){3,}|(?:_\s*){3,})$/.test(line)) { output.push('<hr>'); i++; continue; }
     if (/^ {0,3}>/.test(line)) {
       const quoted = [];
-      while (i < lines.length && /^ {0,3}>/.test(lines[i])) quoted.push(lines[i++].replace(/^ {0,3}> ?/, ''));
+      while (i < lines.length && /^ {0,3}>/.test(lines[i].text)) {
+        const prefix = /^ {0,3}> ?/.exec(lines[i].text)[0].length;
+        quoted.push(sliceSource(lines[i++], prefix));
+      }
       output.push(`<blockquote>${renderBlocks(quoted, context, depth + 1)}</blockquote>`); continue;
     }
     const table = tableHeader(lines, i);
@@ -339,9 +383,9 @@ function renderBlocks(lines, context, depth = 0) {
       const headingCells = table.cells.map((cell, col) => `<th scope="col" style="text-align:${table.alignments[col]}">${renderInline(cell, context)}</th>`).join('');
       const rows = [];
       i += 2;
-      while (i < lines.length && lines[i].trim() && lines[i].includes('|') && !/^ {0,3}(?:#{1,6}[ \t]+|>|```|~~~)/.test(lines[i])) {
+      while (i < lines.length && lines[i].text.trim() && lines[i].text.includes('|') && !/^ {0,3}(?:#{1,6}[ \t]+|>|```|~~~)/.test(lines[i].text)) {
         const cells = splitTableRow(lines[i++]);
-        rows.push(`<tr>${table.cells.map((_, col) => `<td style="text-align:${table.alignments[col]}">${renderInline(cells[col] || '', context)}</td>`).join('')}</tr>`);
+        rows.push(`<tr>${table.cells.map((_, col) => `<td style="text-align:${table.alignments[col]}">${renderInline(cells[col] || {text:'',positions:[]}, context)}</td>`).join('')}</tr>`);
       }
       output.push(`<div class="article-table-scroll" tabindex="0" role="region" aria-label="表格"><table><thead><tr>${headingCells}</tr></thead><tbody>${rows.join('')}</tbody></table></div>`);
       continue;
@@ -350,16 +394,16 @@ function renderBlocks(lines, context, depth = 0) {
       const list = renderList(lines, i, context, depth);
       output.push(list.html); i = list.end; continue;
     }
-    const figure = standaloneImage(line, context);
-    if (figure) { output.push(figure); i++; continue; }
-    const paragraph = [line];
+    const figure = standaloneImage(lines[i]);
+    if (figure) { output.push(emitImage(figure.source, 0, figure.close, figure.destination, context, true)); i++; continue; }
+    const paragraph = [lines[i]];
     i++;
-    while (i < lines.length && !isBlockStart(lines, i) && !standaloneImage(lines[i], context)) {
+    while (i < lines.length && !isBlockStart(lines, i) && !standaloneImage(lines[i])) {
       // Stop before a setext heading instead of merging it into this paragraph.
-      if (i + 1 < lines.length && /^ {0,3}(?:=+|-+)\s*$/.test(lines[i + 1])) break;
+      if (i + 1 < lines.length && /^ {0,3}(?:=+|-+)\s*$/.test(lines[i + 1].text)) break;
       paragraph.push(lines[i++]);
     }
-    output.push(`<p>${renderInline(paragraph.join('\n'), context)}</p>`);
+    output.push(`<p>${renderInline(joinSources(paragraph), context)}</p>`);
   }
   return output.join('\n');
 }
@@ -367,9 +411,30 @@ function renderBlocks(lines, context, depth = 0) {
 /** Render supported Markdown as safe HTML. Remote/raw/data Markdown images are
  * placeholders. Registered assets may be resolved to safe local paths, strict
  * raster data URLs, or explicit HTTP(S) URLs returned by assetUrl(id). */
-export function renderMarkdown(markdown, {assets = [], assetUrl} = {}) {
-  const source = plain(markdown).replace(/\r\n?/g, '\n').replace(/^\t+/gm, tabs => '    '.repeat(tabs.length));
-  return renderBlocks(source.split('\n'), createContext(assets, assetUrl));
+export function renderMarkdown(markdown, {assets = [], assetUrl, onImage} = {}) {
+  return renderBlocks(sourceLines(markdown), createContext(assets, assetUrl, onImage));
+}
+
+/** Image nodes visited by the exact preview parser, regardless of registration.
+ * Code, escaped examples, image alt text and non-rendered table cells are not
+ * visited. Spans address the original Markdown, including CRLF and tabs. */
+export function markdownImageNodes(markdown) {
+  const nodes = [];
+  renderMarkdown(markdown, {onImage: node => nodes.push(node)});
+  return nodes;
+}
+export function markdownAssetIds(markdown) {
+  return markdownImageNodes(markdown).filter(node => node.target.startsWith('asset:') && ASSET_ID.test(node.target.slice(6))).map(node => node.target.slice(6));
+}
+/** Rewrite only real image destinations; retain labels, titles and examples. */
+export function rewriteMarkdownAssetImages(markdown, resolve) {
+  let result = plain(markdown);
+  const nodes = markdownImageNodes(result).filter(node => node.target.startsWith('asset:') && ASSET_ID.test(node.target.slice(6))).sort((a,b) => b.targetStart - a.targetStart);
+  for (const node of nodes) {
+    const value = resolve(node.target.slice(6), node);
+    if (typeof value === 'string' && value) result = result.slice(0,node.targetStart) + value + result.slice(node.targetEnd);
+  }
+  return result;
 }
 
 const ARTICLE_CSS = `

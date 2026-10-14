@@ -1,4 +1,5 @@
 /* Standalone local content workspace. Models run in the user's Codex conversation. */
+import {renderArticleDocument} from './article-render.mjs';
 const CHANNELS = {
   domestic: [
     {id:'wechat',name:'微信公众号',mark:'微',formats:['article','cards'],hint:'完整长文 / 多图内容'},
@@ -56,19 +57,6 @@ function safePreviewHTML(html,assetPrefix) {
   csp.content=`default-src 'none'; img-src data: ${location.origin}; style-src 'unsafe-inline'; font-src 'none'; object-src 'none'; form-action 'none'; connect-src 'none'; base-uri 'none'`;
   doc.head.prepend(csp);
   return '<!doctype html>'+doc.documentElement.outerHTML;
-}
-
-function simpleVariantPreview(variant,assetPrefix) {
-  // A readable, escaped review aid. The exported platform renderer remains authoritative.
-  const text=String(variant.bodyMd || '');
-  const blocks=text.split(/\n{2,}/).map(part=>{
-    const image=part.trim().match(/^!\[([^\]]*)\]\(asset:([\w.-]+)\)$/);
-    if (image) return `<figure><img src="${assetPrefix}${encodeURIComponent(image[2])}" alt="${esc(image[1])}"><figcaption>${esc(image[1])}</figcaption></figure>`;
-    const heading=part.match(/^(#{1,3})\s+(.+)$/);
-    if (heading) return `<h${heading[1].length+1}>${esc(heading[2])}</h${heading[1].length+1}>`;
-    return `<p>${esc(part).replaceAll('\n','<br>')}</p>`;
-  }).join('');
-  return `<html><head><style>body{margin:0;padding:28px 24px;font:15px/1.9 Georgia,"Songti SC",serif;color:#343a32;background:#fffdf8;overflow-wrap:anywhere}h1{font-size:27px;line-height:1.4}h2,h3,h4{line-height:1.5}img{max-width:100%;height:auto}figure{margin:24px 0}figcaption{font-size:12px;color:#7c8176}p{white-space:normal}pre,table{max-width:100%;overflow:auto}</style></head><body><h1>${esc(variant.title)}</h1>${blocks || '<p>正文会显示在这里。</p>'}</body></html>`;
 }
 
 export function mountLongform(container,{project,api,onProject=()=>{},onBack=()=>{},onRenderCards}={}) {
@@ -305,7 +293,7 @@ export function mountLongform(container,{project,api,onProject=()=>{},onBack=()=
     fit.style.width=`${logicalWidth*scale}px`;fit.style.height=`${height*scale}px`;
     stage.dataset.fitScale=String(scale);stage.dataset.logicalWidth=String(logicalWidth);
   }
-  function paintVariantPreview() {const frame=root.querySelector('[data-lf-variant-preview]'),variant=currentVariant();if (frame && variant) frame.srcdoc=safePreviewHTML(simpleVariantPreview(variant,assetPrefix()),assetPrefix());}
+  function paintVariantPreview() {const frame=root.querySelector('[data-lf-variant-preview]'),variant=currentVariant();if (frame && variant) frame.srcdoc=safePreviewHTML(renderArticleDocument(variant,{assets:assets(),assetUrl:id=>assetPrefix()+encodeURIComponent(id)}),assetPrefix());}
   function updateDeliveryPanel() {const panel=root.querySelector('[data-lf-deliveries]');if (panel)panel.innerHTML=deliveriesMarkup();paintStatus();}
   async function clipboard(text) {
     try {await navigator.clipboard.writeText(text);return true;}catch {notice('任务已准备。浏览器未允许复制，请在任务框中全选复制。','info');return false;}

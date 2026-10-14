@@ -3,19 +3,23 @@ import path from 'node:path';
 import {createHash,randomUUID} from 'node:crypto';
 import {ensureContentFields,validateContentFields,CONTENT_FORMATS} from './content-schema.mjs';
 import {stableHash,articleHash,variantHash,articleApproved,variantApproved,updateSources,patchArticle,articleInput,importArticle,variantInput,importVariants,patchVariant,approveArticle,approveVariant} from './content-domain.mjs';
-import {renderArticleDocument} from './article-render.mjs';
+import {renderArticleDocument,markdownAssetIds} from './article-render.mjs';
 import {storeAsset,readAsset,diskPreflight} from './content-storage.mjs';
 import {contentArtifact,buildContentPackage,getExportWork,newDelivery,persistDelivery,EXECUTION_VERSIONS} from './content-delivery.mjs';
 import {profileStatus} from './content-profiles.mjs';
 
 export const CONTENT_CAPABILITIES={mode:'export_only',remoteDrafts:false,formalPublishing:false,rendererVersion:EXECUTION_VERSIONS.converterVersion};
+function renderedApproval(p,work){
+  const approved=work.id==='article-main'?articleApproved(p):variantApproved(p,work);
+  return approved&&work.approval?.rendererVersion===EXECUTION_VERSIONS.converterVersion&&(work.sourceWorkId!==p.article.id||p.article.approval?.rendererVersion===EXECUTION_VERSIONS.converterVersion);
+}
 export function publicContentProject(raw){
   const p=structuredClone(raw);ensureContentFields(p);
   delete p.runtime;
   const variantHashes={},approved={},profiles={};
-  for(const v of p.variants){variantHashes[v.id]=variantHash(p,v);approved[v.id]=variantApproved(p,v)&&v.approval?.rendererVersion===EXECUTION_VERSIONS.converterVersion;}
+  for(const v of p.variants){variantHashes[v.id]=variantHash(p,v);approved[v.id]=renderedApproval(p,v);}
   for(const v of p.variants)profiles[v.id]=profileStatus(v.channel);
-  p.runtime={articleHash:articleHash(p),articleApproved:articleApproved(p)&&p.article.approval?.rendererVersion===EXECUTION_VERSIONS.converterVersion,variantHashes,variantApproved:approved,profiles,capabilities:CONTENT_CAPABILITIES};
+  p.runtime={articleHash:articleHash(p),articleApproved:renderedApproval(p,p.article),variantHashes,variantApproved:approved,profiles,capabilities:CONTENT_CAPABILITIES};
   return p;
 }
 function error(message,status=422){return Object.assign(new Error(message),{status});}
@@ -30,11 +34,10 @@ export function secureInput(value,depth=0){
 }
 function assertRenderable(p,work){
   const declared=new Set(p.sourceBundle.assets.map(a=>a.id));
-  for(const m of String(work.bodyMd||'').matchAll(/!\[[^\]]*\]\(asset:([a-zA-Z0-9_-]+)\)/g))if(!declared.has(m[1]))throw error('正文引用未登记图片：'+m[1]);
+  for(const id of markdownAssetIds(work.bodyMd))if(!declared.has(id))throw error('正文引用未登记图片：'+id);
 }
 function reviewed(p,work){
-  const ok=work.id==='article-main'?articleApproved(p):variantApproved(p,work);
-  if(!ok||work.approval?.rendererVersion!==EXECUTION_VERSIONS.converterVersion)throw error('请先查看当前预览并由用户审核',409);
+  if(!renderedApproval(p,work))throw error('请先查看当前预览并由用户审核',409);
 }
 function resolveWork(p,id){if(id==='article-main')return p.article;const v=p.variants.find(v=>v.id===id);if(!v)throw error('平台版本不存在',404);return v;}
 function taskReplay(p,kind,envelope){
@@ -123,7 +126,7 @@ export function createContentRouter(ctx){
       if(action==='article-preview'){
         const work=resolveWork(p,u.searchParams.get('variantId')||'article-main');
         const html=renderArticleDocument(work,{assets:p.sourceBundle.assets,assetUrl:id=>'/api/projects/'+p.id+'/assets/'+encodeURIComponent(id),lang:work.locale});
-        json(res,200,{html,artifactHash:work.id==='article-main'?articleHash(p):variantHash(p,work),approved:work.id==='article-main'?articleApproved(p):variantApproved(p,work),rendererVersion:EXECUTION_VERSIONS.converterVersion});return true;
+        json(res,200,{html,artifactHash:work.id==='article-main'?articleHash(p):variantHash(p,work),approved:renderedApproval(p,work),rendererVersion:EXECUTION_VERSIONS.converterVersion});return true;
       }
       if(action.startsWith('assets/')){
         const {asset,data}=await readAsset(local,p,decodeURIComponent(action.slice(7)));
@@ -176,7 +179,7 @@ export function createContentRouter(ctx){
       }else if(action.startsWith('variants/')){
         const parts=action.split('/'),id=decodeURIComponent(parts[1]),v=p.variants.find(v=>v.id===id);if(!v)throw error('平台版本不存在',404);
         if(parts[2]==='approve'&&req.method==='POST'){
-          assertUser(body);assertRenderable(p,v);approveVariant(p,id,body.artifactHash);v.approval.rendererVersion=EXECUTION_VERSIONS.converterVersion;
+          assertUser(body);assertRenderable(p,v);if(v.sourceWorkId===p.article.id&&articleApproved(p)&&p.article.approval?.rendererVersion!==EXECUTION_VERSIONS.converterVersion)throw error('请先按当前转换版本核对来源长文',409);approveVariant(p,id,body.artifactHash);v.approval.rendererVersion=EXECUTION_VERSIONS.converterVersion;
         }else if(parts[2]==='images'&&req.method==='POST'){
           reviewed(p,v);if(v.format!=='cards'||body.artifactHash!==variantHash(p,v)||!Array.isArray(body.images)||body.images.length!==v.cards.length)throw error('图卡PNG与当前审核版本不一致',409);
           const dir=path.join(local,'renders',p.id,body.artifactHash);await fs.mkdir(dir,{recursive:true});

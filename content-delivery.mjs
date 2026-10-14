@@ -3,11 +3,11 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {stableHash,articleHash,variantHash,articleApproved,variantApproved} from './content-domain.mjs';
-import {renderArticleDocument} from './article-render.mjs';
+import {renderArticleDocument,markdownAssetIds,rewriteMarkdownAssetImages} from './article-render.mjs';
 import {readAsset,atomicWriteJson,diskPreflight} from './content-storage.mjs';
 import {platformProfile,profileStatus} from './content-profiles.mjs';
 
-export const EXECUTION_VERSIONS={adapterVersion:'content-package-v1',converterVersion:'safe-markdown-v1'};
+export const EXECUTION_VERSIONS={adapterVersion:'content-package-v1',converterVersion:'safe-markdown-v2'};
 export const CONTENT_DELIVERY_STATES=['local_ready','queued_local','running','api_accepted','draft_verified','needs_login','needs_attention','failed','unknown_outcome'];
 export function deliveryPayloadHash(p,variant,{destination='local',mode='export'}={}){
   const artifactHash=variant.id==='article-main'?articleHash(p):variantHash(p,variant);
@@ -21,7 +21,7 @@ export function recoverDeliveries(projects){
 }
 function imageIds(work){
   const explicit=(work.assets||[]).map(a=>typeof a==='string'?a:a.assetId);
-  const embedded=[...String(work.bodyMd||'').matchAll(/!\[[^\]]*\]\(\s*<?asset:([a-zA-Z0-9_-]+)>?(?:\s+(?:"[^"]*"|'[^']*'))?\s*\)/g)].map(m=>m[1]);
+  const embedded=markdownAssetIds(work.bodyMd);
   return [...new Set([...explicit,...embedded,work.coverAssetId].filter(Boolean))];
 }
 export async function contentArtifact(local,p,work,{standalone=false}={}){
@@ -33,7 +33,7 @@ export async function contentArtifact(local,p,work,{standalone=false}={}){
     files.push({name,data});byId.set(id,standalone?'data:'+asset.mimeType+';base64,'+data.toString('base64'):name);
   }
   const html=renderArticleDocument(work,{assets,assetUrl:id=>byId.get(id),lang:work.locale||'zh-CN'});
-  const markdown=String(work.bodyMd||'').replace(/\]\(\s*<?asset:([a-zA-Z0-9_-]+)>?((?:\s+(?:"[^"]*"|'[^']*'))?)\s*\)/g,(whole,id,title)=>byId.has(id)?']('+byId.get(id)+title+')':whole);
+  const markdown=rewriteMarkdownAssetImages(work.bodyMd,id=>byId.get(id));
   return {html,markdown,files};
 }
 export async function buildContentPackage(local,p,work,{artifactHash,deliveryId}={}){
