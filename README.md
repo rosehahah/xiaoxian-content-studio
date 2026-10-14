@@ -6,7 +6,9 @@
 [![GitHub stars](https://img.shields.io/github/stars/rosehahah/xiaoxian-content-studio?style=flat-square&color=EA3F10)](https://github.com/rosehahah/xiaoxian-content-studio/stargazers)
 [![All Contributors](https://img.shields.io/badge/all_contributors-9-EA3F10.svg?style=flat-square)](#contributors-)
 
-一个给个人创作者使用的本机内容工作台：灵感来了先记下来，一次整理成内容和图卡，再分别写入微信公众号、小红书和抖音草稿。最后检查和正式发布，仍然由你自己完成。
+一个给个人创作者使用的本机内容工作台：保存原始材料与事实，制作图卡或独立长文，再按需适配国内与海外平台。当前版本默认 **仅本机导出（export-only）**：审核后下载 HTML、图片和 ZIP 内容包，由你在目标平台检查与发布。
+
+远程草稿连接器保留协议实现与模拟测试，尚未完成真实账号和平台验收，默认服务中禁用。存在连接器代码或配置，不代表内容已经写入平台。
 
 ![小苋内容工作台](preview-workspace.jpg)
 
@@ -18,28 +20,33 @@
 
 灵感可能只花一分钟，后面的搬运却要花很久。事情一多，原本想讲的内容就很容易被拖掉。
 
-所以我做了这个工作台，希望把最麻烦的重复劳动接起来：**我只需要先抓住那个点子，系统帮助我把它推进到三个平台的草稿箱；最终发不发、什么时候发，仍然由我决定。**
+所以我做了这个工作台，希望把最麻烦的重复劳动接起来：**先抓住那个点子，把资料、成品和各平台版本留在能继续编辑的项目里；最终发不发、什么时候发，仍然由我决定。**
 
-## 一个点子怎样变成三端草稿
+## 一个故事怎样成为不同平台的内容
 
 ```mermaid
 flowchart LR
-    A[记下一个点子] --> B[整理成小白能懂的内容]
-    B --> C[制作并审核图卡]
-    C --> D[适配三端标题、正文和话题]
-    D --> E[写入公众号、小红书、抖音草稿]
-    E --> F[自己检查并正式发布]
+    A[原始材料与事实依据] --> B[图卡与短帖]
+    A --> C[经验教程或创业日志]
+    B --> D[用户分别审核作品]
+    C --> D
+    D --> E[独立选择国内适配]
+    D --> F[按需选择海外原生改写]
+    E --> G[分别预览和审核平台版本]
+    F --> G
+    G --> H[下载本机内容包]
+    H --> I[自己到目标平台检查与发布]
 ```
 
-这里的每一步只负责自己的事情：内容没确认，不进入正式内页制作；图卡没审核，不进入平台草稿；平台草稿写好后，系统停在发布按钮之前。
+长文可以在没有图卡的情况下完成、预览与审核。原文、图卡和平台版本各有审核记录；国内选择不会自动勾选海外，导入 Agent 结果不会替你确认或发布。
 
 ## 它主要替我省掉什么
 
-- 一个灵感只整理一次，不必在三个平台重新从头写。
-- 一套审核后的图卡可以继续用于三端，不再反复导出、找图和上传。
-- 自动适配不同平台的标题、正文字数和话题数量。
-- 登录状态提前检查，准备好后再自动填写创作中心。
-- 所有内容先进入草稿箱，保留最后一次人工检查。
+- 原始材料与事实依据保存一次，后续作品引用同一份材料。
+- 文章、图卡和各平台稿能重新打开、修改、预览与交付。
+- 复制对应创作任务给 Agent，按读者和平台组织内容，再将结果导入。
+- 国内成品完成后，按需进入独立海外阶段，重新写英语和图内文字。
+- 审核后的内容打包带走，保留目标平台上的最终人工检查。
 
 它适合同时经营多个内容平台的个人博主、个人 IP 和小团队，尤其适合“点子很多，但容易卡在整理与发布流程”的创作者。
 
@@ -49,10 +56,14 @@ flowchart LR
 - 按主题组织的原创社媒参考，与独立的HTML/SVG教程内页设计。
 - 自由编排的 1080 × 1440 HTML 图卡，可导出 PNG 与交付 ZIP。
 - 内容确认、逐图审核、版本指纹和上游修改失效机制。
+- 独立的经验教程与创业日志编辑器，不依赖图卡、封面或图卡审核。
+- 来源、事实、核验状态与图片登记；正文引用绑定事实与素材版本。
+- Markdown 安全预览，支持图片/GIF、图注、列表、表格、代码与 375/390/430 宽度切换。
+- 完整离线 HTML，以及含 Markdown、登记图片、审核记录和说明的 ZIP。
 - Lucide 与 Tabler 共 8,104 个本机 SVG 素材，支持中文同义词搜索。
-- 微信公众号草稿接口，以及小红书、抖音的本机浏览器草稿自动化。
-- 小红书和抖音先校验 Ego Lite 登录状态，再开放自动填写。
-- 只填写草稿；代码没有正式发布端点，浏览器脚本不点击“发布”。
+- 按渠道、内容形式和语言分别保存平台版本；单个平台改稿不会覆盖原文或其他平台稿。
+- 本机交付记录、重复导出复用、目标变化后的独立交付记录与手动反馈。
+- 远程草稿协议保留在代码与 mock 测试中；默认运行拒绝远程草稿和正式发布。
 
 
 ## 选题策划与账号偏好
@@ -91,7 +102,7 @@ flowchart LR
 
 ## 本机启动
 
-需要 Node.js 20+。浏览器登录、草稿填写和页面验收统一使用已安装并连接的 Ego Lite（`ego-browser`），不需要 Google Chrome。
+本版在 Node.js 22 验证。本机编辑、预览和导出不需要平台账号或发布凭证。Agent 的页面验收统一使用已安装并连接的 Ego Lite（`ego-browser`），不需要 Google Chrome；远程草稿在默认版本中禁用。
 
 ```sh
 npm install
@@ -103,44 +114,92 @@ npm start
 
 本机数据保存在 `.local-data/`，该目录已加入 `.gitignore`：
 
-- `projects.json`：项目内容与审核记录
-- 登录会话由本机 Ego Lite 管理；旧 `browser-profiles/` 保留但不再读取或迁移
-- `draft-jobs/`：草稿任务状态
+- `projects.json`：原始材料、事实、文章、图卡、平台版本与审核记录
+- `assets/`：登记图片/GIF；按实际字节计算 SHA-256，读取和导出时核对
+- `packages/`、`deliveries/`：本机内容包与对应交付记录
+- `backups/`：旧 schema 数据首次迁移前的原始备份
+- `draft-jobs/`、可选 `overseas-config.json`：保留的连接器协议状态与私有配置；存在它们不代表远程已启用
+- 旧 `browser-profiles/` 保留但不再读取或迁移；不搬运旧浏览器令牌
 
 `npm start` 会先构建所需资源。大型图标数据、依赖包和复制的运行模块由 `npm run build` 生成，不再提交到 Git；应用源文件仍保存在 `dist/`，请勿整目录删除。双击启动脚本也只拉起 Ego Lite。
 
-项目不会读取或导出平台密码。公众号凭证从本机环境读取，不进入网页、项目 JSON 或 Git 仓库。
+网页不接收平台密码、令牌或公众号密钥，内容包不包含私有配置与原始私有资料。默认导出流程不检查平台凭证，也不调用远程平台。自定义 `STUDIO_DATA_DIR` 时，数据目录同样应放在 Git 忽略范围内。
 
 ## 工作流
 
-1. **选题与内容**：比较方向、确定收益，再完成正文图卡。
-2. **封面**：看参考、准备素材、比较并选择候选。
-3. **内页**：选择编排、配色和素材，实际导出检查可读性。
-4. **审核**：用户逐张检查，确认最终成图。
-5. **草稿**：适配各平台配文，写入草稿或下载交付包。
+图卡路线保留选题、封面、内页与逐图审核。新建时也可以直接选择“长文”，或在作品中切换到“长文与平台适配”：
+
+1. **素材**：保存故事、链接、来源与事实核验状态，上传本地图片/GIF。链接本身不等于已读取或核实。
+2. **长文**：选择经验教程或创业日志，直接编辑 Markdown，或复制创作任务到 Agent 后导入 JSON。网页没有直接调用生成模型。
+3. **预览与审核**：核对事实引用、文字、图片及手机预览，由用户确认当前长文版本。未登记图片或未核实的引用不能用于审核。
+4. **国内 / 海外适配**：两组独立选择渠道、形式和语言，只为本轮所选版本准备任务；原文与图卡可分别作为材料。
+5. **交付与反馈**：分别审核平台稿，生成本机内容包；反馈手动录入真实评论或指标，不自动抓取平台数据。
+
+长文写作使用项目原创 [xiaoxian-longform](.agents/skills/xiaoxian-longform/SKILL.md)。教程优先使用用户环境中可读的小苋AI圈写作系统与 `real-practice-sop`；日志优先使用 Viral Writer 和中文自然化编辑。外部入口不可用时采用内置简明规则，并记录实际使用的入口或参考方法，不宣称独立 Humanizer 已安装。
+
+完整离线 HTML 将引用的登记图片嵌入文件；ZIP 包含 `article.html`、`article.md`、`assets/`、配文、审核记录和说明。图卡平台版本还需生成并检查对应语言的实际 PNG；LinkedIn 图卡包不等于已经生成 PDF。
 
 更完整的职责、确认和失效条件见 [WORKFLOW.md](WORKFLOW.md)。项目内 Agent Skills 位于 [.agents/skills](.agents/skills)，创作方法和研究取舍见 [research/创作方法研究.md](research/创作方法研究.md)。
 
-## 平台边界
+## 独立海外阶段与平台边界
 
-- **微信公众号**：调用现有本机草稿接口，只创建和读回草稿。
-- **小红书 / 抖音**：使用 Ego Lite 的任务页面，上传审核图片并填写标题、正文和话题。会话失效、验证码或页面结构变化时停止并交给用户。
-- **所有平台**：没有自动发布功能。
+常用路径是先完成国内成品，再按需要进入“海外适配”。中文稿、原始资料和证据共同作为输入：先确定目标读者与平台简报，再选择切入、结构和英语表达。不会自动把中文全文翻译后广播到所有海外渠道；图卡版本需要改图内文字并重新排版。
 
-平台页面会变化，浏览器自动化应视为可维护的适配器，而不是平台官方 API。使用者需要遵守对应平台条款。使用 Ego Lite 不意味着平台允许自动化，也不保证免于风控。驱动不可用时明确报错，没有 Chrome 或隐蔽自动化的兜底。
+| 平台与形式 | 当前工作台交付 | 远程连接状态 |
+| --- | --- | --- |
+| 微信公众号长文 / 多图 | 独立长文或图卡内容包 | 普通文章 `news` 与多图 `newspic` 协议分开；均未实账号验收，默认禁用 |
+| 小红书 / 抖音图卡 | 图片与配文包 | 旧浏览器草稿适配器仅保留协议测试，默认禁用 |
+| 知乎 / 掘金长文 | 独立适配稿与本机包 | 未接通远程正文发布 |
+| Substack 长文 | 原生改写稿、HTML / Markdown 和登记图片 | 旧浏览器草稿连接器未实平台验收，默认禁用；公开正文写入 API 未核实 |
+| LinkedIn 短帖 / 图卡 | 独立短帖或实际图卡 PNG 包 | 未接通远程；原生 Articles/newsletter 不在当前形式列表中 |
+| X 短帖 / 图卡 / Articles | 按形式保存与导出 | 官方 Articles 草稿协议已有实现和测试，未实账号验收，默认禁用 |
+| Threads 短帖 / 图卡 | 按语言保存文稿与图片包 | 未接通远程；旧本机队列不代表 Threads 草稿 |
+
+平台的官方 API 能力、本项目协议代码和当前用户账号可用性是三件事。[wechat-article.mjs](wechat-article.mjs) 通过依赖注入实现普通文章草稿的上传、创建与回读协议，没有接入本版的真实账号交付路径。mock 返回成功或拿到草稿编号，也不能证明真实平台渲染和内容已完成验收。
+
+LinkedIn Posts API 的外部文章链接卡片不等于原生 Articles/newsletter 正文。LinkedIn 网站自动化不能用来补未接通的接口。平台规则和格式能力在后续接入时分别核验，使用 Ego Lite 本身不代表平台允许自动操作。
+
+这版只提供 `export` 交付：`draft`、`publish` 和非本机目标请求会被拒绝，旧草稿执行端点也不向真实平台发起操作。接口接受、媒体容器、远程草稿、审核通过、公开发布与邮件发送必须分别记录，`local_ready` 只表示本机包就绪。
+
+### 本机长文接口
+
+所有编辑使用当前 `revision`；Agent 导入同时使用对应任务的 `inputFingerprint`，过期结果返回 409。审核要求用户明确确认，Agent 导入不得写入 `approval` 或交付状态。
+
+| 用途 | 接口 |
+| --- | --- |
+| 材料与图片 | `PUT /api/projects/:id/sources`、`POST /api/projects/:id/assets` |
+| 长文接力与编辑 | `GET /api/projects/:id/article-input`、`POST /api/projects/:id/article-import`、`PATCH /api/projects/:id/article` |
+| 阅读预览与用户审核 | `GET /api/projects/:id/article-preview`、`POST /api/projects/:id/article-approve` |
+| 独立渠道与平台稿 | `PATCH /api/projects/:id/channels`、`GET /api/projects/:id/variant-input`、`POST /api/projects/:id/variant-import` |
+| 平台稿编辑与审核 | `PATCH /api/projects/:id/variants/:variantId`、`POST /api/projects/:id/variants/:variantId/approve` |
+| 本机导出与记录 | `GET /api/projects/:id/export?format=html`、`POST /api/projects/:id/deliveries`、`GET /api/deliveries/:id` |
+| 反馈 | `PATCH /api/projects/:id/feedback`，通过单项目 GET 回读 |
+
+长文编辑、预览、存储与交付逻辑分别见 [content-domain.mjs](content-domain.mjs)、[article-render.mjs](article-render.mjs)、[content-storage.mjs](content-storage.mjs) 和 [content-delivery.mjs](content-delivery.mjs)。海外写作方法见 [原生改写规则](.agents/skills/xiaoxian-longform/references/overseas-rewrite.md)；外部参考的采用范围记录在[致谢](ACKNOWLEDGEMENTS.md)。
 
 ## 开发与验证
 
 ```sh
+node scripts/preflight.mjs build
 npm run build
 npm test
+npm run test:ci
+# 新长文真实 HTTP 集成测试：临时数据、独立端口、默认仅导出
+node --test tests/longform-api.test.mjs
 # 封面浏览器验收（Ego Lite；仅使用隔离本机数据）
 npm run test:cover-ui
 npm run test:topics-ui
+# 长文、独立海外版本和旧图卡全链路；全程合成隔离数据
+npm run test:longform-ui
+# 旧草稿界面与协议的模拟测试；不代表实平台可用
 npm run test:draft-ui
 ```
 
-测试覆盖审核约束、版本冲突、同源限制、平台字数、自动草稿状态和正式发布端点缺失。测试使用隔离数据和模拟草稿驱动，不调用内容平台远程接口。
+测试覆盖来源依赖、独立审核与失效、任务复用、版本冲突、同源限制、安全 Markdown、GIF/完整离线包、交付幂等和中断恢复。新长文 HTTP 测试使用临时 `STUDIO_DATA_DIR` 与独立端口，显式不设置 `STUDIO_DRAFT_DRIVER`，验证默认远程拒绝路径。
+
+旧连接器协议测试在自己的子进程中设置 `STUDIO_DRAFT_DRIVER=mock`，只校验模拟响应、状态与恢复逻辑；这个开关不是生产连接启用方法。测试不调用真实内容平台。模拟测试通过、结构检查通过与真实账号/浏览器视觉验收需分别报告；跳过或不可用的检查不能记为通过。
+
+CI 只允许六个已声明的 Ego 用例跳过，发行仍需对应提交上的专用浏览器证据。`scripts/package-release.mjs --sha <完整SHA> --output <目录>`从指定提交生成源码候选包和校验清单；`scripts/check-release-package.mjs --help`提供全新安装、默认仅导出、合成旧数据升级与备份回滚验收入口。安装、构建、迁移和打包各自预检磁盘空间，不自动删除用户文件。回滚使用旧包和升级前数据备份，不能用旧代码直接打开schema 2。
 
 ## 开源、致谢与贡献者
 

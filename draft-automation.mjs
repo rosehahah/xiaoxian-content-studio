@@ -8,6 +8,8 @@ import {StringDecoder} from 'node:string_decoder';
 import {EgoPageAdapter} from './ego-adapter.mjs';
 import {configureCreatorPermissions} from './creator-permissions.mjs';
 import {appendXiaohongshuTopics,verifyXiaohongshuCopy} from './xiaohongshu-topics.mjs';
+import {inspectSubstackSession,fillSubstackDraft} from './substack-draft.mjs';
+import {validateSubstackUrl} from './overseas-config.mjs';
 
 const run=promisify(execFile);
 const workerPath=fileURLToPath(import.meta.url);
@@ -16,6 +18,7 @@ const driverError='Ego Lite 不可用，请安装并连接 ego-browser；不会�
 const PLATFORM={
   xiaohongshu:{name:'小红书',url:'https://creator.xiaohongshu.com/publish/publish?source=official',imageTabs:/上传图文|发布图文|图文发布/},
   douyin:{name:'抖音',url:'https://creator.douyin.com/creator-micro/content/upload',imageTabs:/发布图文|图文发布|发图文/},
+  substack:{name:'Substack',url:'https://substack.com/publish'},
 };
 
 const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
@@ -87,6 +90,7 @@ export function classifyCreatorSession(evidence,platform){
   return {status:'unknown',message:'页面仍在加载，或创作入口尚未识别；当前不能确认登录状态。'};
 }
 export async function inspectCreatorSession(page,platform){
+  if(platform==='substack')return inspectSubstackSession(page.native||page);
   const evidence=await page.evaluate(()=>{
     const visible=n=>Boolean(n&&n.getClientRects().length&&getComputedStyle(n).visibility!=='hidden'&&getComputedStyle(n).display!=='none');
     const text=document.body?.innerText||'';
@@ -165,22 +169,24 @@ export async function runEgoCreatorTask(input,{taskSpace,configurePermissions=co
   const config=PLATFORM[input.platform];if(!config)throw Error('不支持的平台');
   const task=await taskSpace('小苋 · '+config.name+(input.kind==='session'?'登录检查':'草稿填写'));
   let handedOff=false,page;
-  const onUpdate=async(status,message)=>onEvent({status,message,browser:'ego-lite',spaceId:task.spaceId});
+  const onUpdate=async(status,message,metadata={})=>onEvent({status,message,...(metadata.draftUrl?{draftUrl:metadata.draftUrl}:{}),...(['created','unknown','not-created'].includes(metadata.outcome)?{outcome:metadata.outcome}:{}),browser:'ego-lite',spaceId:task.spaceId});
   try{
     await onUpdate('opening','正在使用 Ego Lite 打开'+config.name+'创作中心');
     if(task.pages){
       const managed=await task.pages();page=managed.find(p=>p.label==='p1')||managed[0];
       if(!page){const active=(await task.tabs()).find(tab=>tab.active);page=active?await task.adopt(active.page):await task.newPage();}
     }else page=task.page('p1');
-    await configurePermissions(page,input.platform);
-    await page.goto(config.url);
+    if(input.platform!=='substack')await configurePermissions(page,input.platform);
+    const publicationUrl=input.platform==='substack'?validateSubstackUrl(input.publicationUrl):'';
+    await page.goto(publicationUrl?publicationUrl+'/publish':config.url);
     await page.snapshot();
     const adapted=new EgoPageAdapter(page);
     if(input.kind==='session'){
       const result=await waitForLogin(adapted,input.platform,onUpdate);
       await onUpdate(result.status,result.status==='logged_in'?config.name+'登录状态已确认，可以填写草稿。':result.message);
       if(result.status!=='logged_in'){await task.handOff();return;}
-    }else await fillCreatorDraft({...input,page:adapted,onUpdate});
+    }else if(input.platform==='substack')await fillSubstackDraft({...input,page,onUpdate});
+    else await fillCreatorDraft({...input,page:adapted,onUpdate});
     // Leave the result for the user to verify or save. Never click publish.
     await task.finish({keep:[page.label||'p1']});
   }catch(error){
@@ -226,15 +232,15 @@ export async function executeEgoTask(input,onUpdate){
     });
   });}finally{await fs.rm(dir,{recursive:true,force:true});}
 }
-export async function runCreatorDraft({platform,title,body,tags,imageFiles,onUpdate}){
+export async function runCreatorDraft({platform,title,subtitle,body,tags,imageFiles,publicationUrl,onUpdate}){
   if(!PLATFORM[platform])throw Error('不支持的平台');
   if(process.env.STUDIO_DRAFT_DRIVER==='mock')return runMock({onUpdate});
-  return executeEgoTask({kind:'draft',platform,title,body,tags,imageFiles},onUpdate);
+  return executeEgoTask({kind:'draft',platform,title,subtitle,body,tags,imageFiles,publicationUrl},onUpdate);
 }
-export async function prepareCreatorSession({platform,onUpdate,spaceId}){
+export async function prepareCreatorSession({platform,onUpdate,spaceId,publicationUrl}){
   if(!PLATFORM[platform])throw Error('不支持的平台');
   if(process.env.STUDIO_DRAFT_DRIVER==='mock'){await onUpdate('opening','模拟打开登录页');await onUpdate('waiting_login','模拟检查登录状态');await onUpdate('logged_in','模拟登录校验通过');return;}
-  return executeEgoTask({kind:'session',platform,spaceId},onUpdate);
+  return executeEgoTask({kind:'session',platform,spaceId,publicationUrl},onUpdate);
 }
 export const draftAutomationAvailable=async()=>{
   if(process.env.STUDIO_DRAFT_DRIVER==='mock')return true;

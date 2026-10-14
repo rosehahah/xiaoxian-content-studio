@@ -136,3 +136,46 @@ html{color:var(--brand-text);background:#fffaf7}button:focus-visible,a:focus-vis
 .concept-poster.cc-editorial .cc-footer{justify-content:space-between;color:var(--cc-accent);padding-top:22px;align-items:center}
 .concept-poster.cc-editorial .cc-editorial-art{width:auto;height:112px;max-width:650px;overflow:visible;color:var(--cc-accent)}
 .cc-editorial-art text{font-size:29px;font-weight:600;fill:currentColor;stroke:none;letter-spacing:-.3px}
+
+/* Related creator tools */
+.platform-groups{display:flex;gap:30px;flex-wrap:wrap;margin:30px 0}
+.platform-nav-group>span{display:block;color:#a57e6b;font-size:11px;font-weight:650;letter-spacing:1.1px;margin-bottom:10px}
+.platform-groups .platform-nav{display:flex;gap:10px;margin:0;flex-wrap:wrap}
+.platform-groups .platform-btn{white-space:nowrap;padding:13px 17px}
+.platform-icon.substack{background:#ffede3;color:#df5a16;font-family:Georgia,serif;font-weight:800}
+.platform-icon.x{background:#f0ece8;color:#29231f;font-family:Georgia,serif;font-size:18px}
+.platform-icon.threads{background:#f0ece8;color:#29231f;font-size:19px;font-weight:700}
+.overseas-copy-intro{margin:22px 0 25px;padding:19px 22px;border-left:3px solid var(--brand,#ff4b00);background:#fff7f0;border-radius:0 9px 9px 0}
+.overseas-copy-intro .planning-kicker{margin-bottom:7px;color:#ba6446;font-size:10px;letter-spacing:1.4px}
+.overseas-copy-intro p{margin:0;font-size:13px;line-height:1.85;color:#8e6b58}
+.overseas-language{display:flex;align-items:center;gap:16px;margin:20px 0}
+.overseas-language label{margin:0;font-size:12px}
+.overseas-language select{max-width:180px;padding:9px 12px}
+.overseas-task-actions{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.overseas-task-note{line-height:1.8;margin:12px 0 28px}
+.longform-body textarea{font-size:14px;line-height:1.9;min-height:430px;resize:vertical;font-family:inherit}
+.overseas-drafts .draft-delivery-panel{align-self:start}
+.overseas-drafts .draft-mini-grid{max-height:180px;overflow:auto}
+.overseas-boundary{line-height:1.85;margin:14px 0 0}
+.overseas-delivery-result{margin:20px 0;padding:17px;border:1px solid #eec9b7;background:#fff7ef;border-radius:10px;overflow-wrap:anywhere}
+.overseas-delivery-result b{font-size:12px;color:#ab4f2d}
+.overseas-delivery-result p{font-size:12px;line-height:1.8;margin:8px 0 0}
+.overseas-delivery-result .btn{margin-top:12px}
+.overseas-manual{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:23px;padding-top:15px;border-top:1px solid #f0dfd5;flex-wrap:wrap}
+.overseas-manual>a{display:inline-flex;gap:6px;align-items:center;color:#ac5837;font-size:12px;text-decoration:underline;text-underline-offset:3px}
+.overseas-publication{margin:16px 0 20px;font-size:12px;line-height:1.8}
+.overseas-publication summary{cursor:pointer;color:#9b705c}
+.overseas-publication label{margin-top:15px}
+.overseas-publication input{font-size:12px}
+.draft-lock-note{margin:20px 0;background:#fff4e8}
+.overseas-drafts textarea:disabled,.overseas-drafts input:disabled,.overseas-drafts select:disabled{opacity:.7;cursor:wait;background:#fff9f3}
+@media(max-width:760px){.platform-groups{gap:20px;flex-direction:column}.platform-groups .platform-btn{padding:11px 13px;font-size:12px}.longform-body textarea{min-height:350px}.overseas-copy-intro{padding:16px}.overseas-language select{max-width:160px}}
+.sidebar-friends{margin-bottom:22px}
+.sidebar-friends-label{margin-bottom:8px;font-size:10px;letter-spacing:1px;color:#7a8577}
+.sidebar-friend{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 0;font-size:12px;color:#53624e;border-radius:5px}
+.sidebar-friend:hover{color:#27382f;text-decoration:underline;text-underline-offset:3px}
+.sidebar-friend svg{flex-shrink:0}
+@media(max-width:760px){.sidebar .sidebar-foot{display:block;width:100%;padding:0}.sidebar-foot .quiet-note,.sidebar-foot>.small{display:none}.sidebar-friends{display:flex;align-items:center;gap:12px;margin:0}.sidebar-friends-label{margin:0}.sidebar-friend{justify-content:flex-start;padding:5px 0}}
+
+/* Parallel article and card workspaces, preserving the existing paper palette. */
+.work-mode-nav{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:22px 0 8px;padding:7px;background:#eeeae1;border-radius:12px;border:1px solid #dfd8cd}.work-mode-nav button{font:inherit;font-size:13px;padding:12px 20px;border-radius:8px;color:#756658}.work-mode-nav button.active{background:#fffdf8;color:#365640;box-shadow:0 2px 7px #4c372014;font-weight:650}.work-mode-nav span{margin-left:auto;padding:0 10px;font-size:11px;color:#948477}.main{min-width:0}#longform-host{min-width:0}@media(max-width:600px){.work-mode-nav{gap:4px}.work-mode-nav button{padding:10px 13px}.work-mode-nav span{display:none}}

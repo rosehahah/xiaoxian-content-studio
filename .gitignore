@@ -1,4 +1,4 @@
-node_modules/
+/node_modules
 .local-data/
 .DS_Store
 *.log
@@ -25,7 +25,10 @@ dist/icon-ids.mjs
 dist/icon-library.mjs
 dist/vendor.js
 dist/model.mjs
+dist/content-schema.mjs
+dist/article-render.mjs
 dist/planning.mjs
+dist/overseas-content.mjs
 dist/creative.mjs
 dist/cover-library.mjs
 dist/licenses/

@@ -1,0 +1,88 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import {fileURLToPath,pathToFileURL} from 'node:url';
+import {spawn,execFileSync} from 'node:child_process';
+import JSZip from 'jszip';
+import {checkCardsUI} from './check-cards-ui.mjs';
+const root=fileURLToPath(new URL('..',import.meta.url));
+const port=14437,origin='http://localhost:'+port;
+const field=name=>'[data-lf-field="'+name+'"]';
+const action=(name,extra='')=>'[data-lf-action="'+name+'"]'+extra;
+export async function checkLongformUI(task,output){
+  const page=task.page('p1');await fs.mkdir(output,{recursive:true});
+  const run={runId:Date.now().toString(36),sha:process.env.STUDIO_PACKAGE_SHA||execFileSync('git',['rev-parse','HEAD'],{cwd:root,encoding:'utf8'}).trim(),sourceKind:process.env.STUDIO_PACKAGE_SHA?'release_archive':'git_checkout',workingTreeDirty:process.env.STUDIO_PACKAGE_SHA?null:Boolean(execFileSync('git',['status','--porcelain'],{cwd:root,encoding:'utf8'}).trim()),startedAt:new Date().toISOString(),status:'running'};await fs.writeFile(path.join(output,'results.json'),JSON.stringify(run,null,2));
+  const results=[];const passed=name=>{results.push(name);console.log('PASS '+name);};
+  const tab=async name=>{await page.click(action('tab','[data-tab="'+name+'"]'));await page.waitForSelector(action('tab','[data-tab="'+name+'"][aria-current="step"]'));};
+  const save=async()=>{await page.click('.lf-savebar '+action('save'));await page.waitForFunction(()=>document.querySelector('[data-lf-save-state]')?.textContent==='已保存在本机');};
+  const get=async()=>{const id=new URL(await page.url()).searchParams.get('project');return (await (await fetch(origin+'/api/projects/'+id)).json()).project;};
+  await page.cdp('Emulation.setDeviceMetricsOverride',{width:1440,height:1050,deviceScaleFactor:1,mobile:false});
+  await page.goto(origin);await page.waitForSelector('[data-action="new"]');
+  await fs.writeFile(path.join(output,'initial-snapshot.txt'),await page.snapshot());
+  await page.click('[data-action="new"] >> nth=0');await page.fill('#new-topic','合成验收：材料到长文');await page.selectOption('#new-kind','article');await page.click('#create-project');await page.waitForSelector('[data-lf-source-note]');
+  assert.equal((await get()).content.cards.length,0);
+  await page.fill('[data-lf-source-note]','这是一份合成验收材料，不是真实用户经历。先保存来源，再核对成品。');
+  await page.click(action('add-fact'));await page.fill('[data-lf-fact-field="statement"]','合成验收事实：本页可保存资料。');
+  await page.click('.lf-fact details summary');await page.selectOption('[data-lf-fact-field="verification"]','user_reported');await save();
+  const gif=Buffer.from('47494638396101000100800000f2eadd36564021ff0b4e45545343415045322e30030100000021f904002d0000002c000000000100010000020244010021f904002d0000002c00000000010001000002024c01003b','hex');
+  const gifPath=path.join(output,'synthetic-ui.gif');await fs.writeFile(gifPath,gif);await page.setInputFiles('[data-lf-upload]',[gifPath]);await page.waitForSelector('.lf-asset');
+  let p=await get();const asset=p.sourceBundle.assets[0];assert.equal(asset.mimeType,'image/gif');passed('无图卡新建长文、保存材料事实与GIF');
+  await tab('article');await page.click('.lf-dependencies summary');await page.click('[data-lf-fact-dep]');
+  const body='# 先保留一个可检查的结果\n\n这是合成测试，不代表真实使用效果。\n\n## 操作步骤\n\n1. 保存资料。\n2. 核对结果。\n\n> 结果应当能重新打开。\n\n```js\nconst syntheticLongLine = "'+ 'local_only_'.repeat(30)+'";\n```\n\n| 输入 | 成品 |\n| --- | --- |\n| 原始材料 | 可检查文稿 |\n\n![合成操作](asset:'+asset.id+')\n\n末尾检查点：全文完整保留。';
+  await page.fill(field('article-bodyMd'),body);await save();
+  await page.click(action('article-preview'));await page.waitForSelector('[data-lf-article-frame]');
+  assert.equal(await page.evaluate(()=>document.querySelector('[data-lf-action="article-approve"]').disabled),true);
+  await page.click('[data-lf-article-ack]');await page.click(action('article-approve'));await page.waitForFunction(()=>document.querySelector('[data-lf-article-badge]')?.textContent==='本版长文已审核');
+  p=await get();assert.equal(p.runtime.articleApproved,true);assert.equal(p.cardApproval,null);passed('经验教程长文独立预览与审核');
+  await page.screenshot({path:path.join(output,'longform-desktop.png'),fullPage:true});
+  for(const width of [375,390,430]){
+    await page.cdp('Emulation.setDeviceMetricsOverride',{width,height:932,deviceScaleFactor:1,mobile:true});await page.click(action('preview-width','[data-width="'+width+'"]'));
+    await page.waitForFunction(()=>{const f=document.querySelector('[data-lf-article-frame]'),s=document.querySelector('[data-lf-preview-stage]');return f&&s&&f.getBoundingClientRect().right<=s.getBoundingClientRect().right+1;});
+    const bounds=await page.evaluate(()=>{const f=document.querySelector('[data-lf-article-frame]'),s=document.querySelector('[data-lf-preview-stage]');return {viewport:innerWidth,page:document.documentElement.scrollWidth,frame:f.getBoundingClientRect().toJSON(),stage:s.getBoundingClientRect().toJSON(),fullText:f.srcdoc.includes('末尾检查点：全文完整保留。'),gif:f.srcdoc.includes('image/gif')||f.srcdoc.includes('/assets/')};});
+    assert.ok(bounds.page<=width);assert.ok(bounds.frame.left>=bounds.stage.left);assert.ok(bounds.frame.right<=bounds.stage.right+1);assert.equal(bounds.fullText,true);assert.equal(bounds.gif,true);
+    await fs.writeFile(path.join(output,'mobile-'+width+'.json'),JSON.stringify(bounds,null,2));await page.screenshot({path:path.join(output,'longform-mobile-'+width+'.png'),fullPage:true});const frame=await page.evaluate(()=>document.querySelector('[data-lf-article-frame]').getBoundingClientRect().toJSON());await page.mouse.move(frame.x+frame.width/2,Math.min(800,frame.y+frame.height/2));await page.mouse.wheel(0,1000,{label:'检查长文末尾'});await page.screenshot({path:path.join(output,'longform-mobile-'+width+'-tail.png'),fullPage:true});
+  }passed('375/390/430完整预览与操作区，无右侧裁切');
+  await page.cdp('Emulation.setDeviceMetricsOverride',{width:1440,height:1050,deviceScaleFactor:1,mobile:false});
+  const downloadPromise=page.waitForEvent('download');await page.click('a[href*="export?format=zip"] >> nth=0');const download=await downloadPromise;const zipPath=path.join(output,'source-article.zip');await download.saveAs(zipPath);
+  const zip=await JSZip.loadAsync(await fs.readFile(zipPath));assert.ok((await zip.file('article.html').async('string')).includes('末尾检查点'));assert.deepEqual(await zip.file('assets/'+asset.sha256+'.gif').async('nodebuffer'),gif);passed('真实UI下载离线包，全文和GIF字节完整');
+  const projectURL=await page.url(),offline=path.join(output,'offline-article');await fs.mkdir(path.join(offline,'assets'),{recursive:true});
+  await fs.writeFile(path.join(offline,'article.html'),await zip.file('article.html').async('nodebuffer'));await fs.writeFile(path.join(offline,'assets',asset.sha256+'.gif'),gif);
+  await page.goto(pathToFileURL(path.join(offline,'article.html')).href);await page.waitForSelector('article');await page.waitForFunction(()=>[...document.images].every(image=>image.complete&&image.naturalWidth>0));
+  assert.ok(await page.evaluate(()=>document.body.textContent.includes('末尾检查点：全文完整保留。')));await page.screenshot({path:path.join(output,'offline-article-opened.png'),fullPage:true});
+  await page.goto(projectURL);await page.waitForSelector('[data-lf-source-note]');passed('实际离线打开HTML，正文末尾与GIF可读');
+  await tab('domestic');await page.click('[data-lf-channel="wechat"]');await save();
+  await tab('overseas');assert.equal(await page.evaluate(()=>document.querySelectorAll('[data-lf-channel]:checked').length),0);
+  for(const channel of ['substack','linkedin'])await page.click('[data-lf-channel="'+channel+'"]');await page.selectOption('[data-lf-format="linkedin"]','cards');await save();
+  await page.click('.lf-task summary');await page.click(action('prepare-task','[data-kind="overseas"]'));await page.waitForFunction(()=>document.querySelector('[data-lf-task-output="overseas"]')?.value.includes('所选平台档案'));
+  p=await get();const keys=[{channel:'substack',format:'article',locale:'en-US'},{channel:'linkedin',format:'cards',locale:'en-US'}];const input=await (await fetch(origin+'/api/projects/'+p.id+'/variant-input?keys='+encodeURIComponent(JSON.stringify(keys)))).json();
+  const variants=input.keys.map(k=>({...k,profileVersion:input.profileVersion,title:k.channel==='substack'?'A working version you can inspect':'Make the result easy to check',bodyMd:k.channel==='substack'?'A synthetic walkthrough with evidence, tradeoffs, and steps.\n\nCheck the output before scaling the workflow.':'One practical habit: save and inspect a complete result.',assets:[],sourceDeps:p.article.sourceDeps,...(k.format==='cards'?{cards:[{kind:'editorial',eyebrow:'SYNTHETIC QA',title:'Keep a checkable result',body:'Save the input.\nInspect the output.\nKeep evidence of what changed.',note:'Local test fixture only'}],visual:{theme:'sage',layout:'airy'}}:{})}));
+  await page.fill('[data-lf-import="overseas"]',JSON.stringify({revision:input.revision,inputFingerprint:input.inputFingerprint,keys:input.keys,sourceWorkId:input.sourceWorkId,variants}));await page.click(action('import-result','[data-kind="overseas"]'));await page.waitForSelector('[data-lf-variant-select]');
+  p=await get();assert.equal(p.variants.length,2);assert.deepEqual(p.selectedChannels.domestic,['wechat']);assert.deepEqual(p.selectedChannels.overseas,['substack','linkedin']);assert.ok(p.variants.every(v=>!v.approval));passed('海外独立选择，平台任务与JSON导入，不自动审核');
+  for(const variant of variants){await page.selectOption('[data-lf-variant-select]',variant.id);await page.click('[data-lf-variant-ack]');await page.click(action('variant-approve'));await page.waitForFunction(()=>document.querySelector('[data-lf-variant-badge]')?.textContent==='本版已审核');}
+  await tab('delivery');const cardId=variants.find(v=>v.format==='cards').id;await page.selectOption('[data-lf-delivery-variant]',cardId);
+  const pngDownload=page.waitForEvent('download',{timeout:60000});await page.click(action('export-variant'));const cardDownload=await pngDownload;await cardDownload.saveAs(path.join(output,'english-cards.zip'));
+  const cardsZip=await JSZip.loadAsync(await fs.readFile(path.join(output,'english-cards.zip'))),png=await cardsZip.file('images/01.png')?.async('nodebuffer');
+  assert.ok(png,'真实图卡PNG应入包');assert.equal(png.readUInt32BE(16),1080);assert.equal(png.readUInt32BE(20),1440);await fs.writeFile(path.join(output,'english-card.png'),png);
+  assert.match(await page.evaluate(()=>document.querySelector('.lf-content').textContent),/本机包就绪/);passed('独立平台审核，英文图中文字重排与实际1080×1440 PNG导出');
+  await page.fill('[data-lf-feedback-note]','合成验收反馈：下一版应补充成功检查。');await page.click(action('add-feedback'));await page.waitForSelector('.lf-feedback-list article');passed('手动反馈保存，不编造运营指标');
+  await tab('overseas');await page.selectOption('[data-lf-variant-select]',variants[0].id);await page.fill(field('variant-bodyMd'),'A revised synthetic English argument, with the same evidence.');await save();p=await get();assert.equal(p.runtime.variantApproved[variants[0].id],false);assert.equal(p.runtime.variantApproved[cardId],true);assert.equal(p.runtime.articleApproved,true);passed('单平台改稿只撤销本版审核');
+  await tab('article');await page.fill(field('article-bodyMd'),body+'\n\n修订说明：这是源稿的新版本。');await save();p=await get();assert.equal(p.runtime.articleApproved,false);assert.ok(Object.values(p.runtime.variantApproved).every(v=>!v));passed('源长文改稿使相关海外版本过期');
+  const other=await task.newPage();await other.goto(await page.url());await other.waitForSelector('[data-lf-source-note]');await other.click(action('tab','[data-tab="article"]'));await other.waitForSelector(field('article-title'));
+  await page.fill(field('article-title'),'窗口A未保存的文字，应保留');await other.fill(field('article-title'),'窗口B已保存的新版本');await other.click('.lf-savebar '+action('save'));await other.waitForFunction(()=>document.querySelector('[data-lf-save-state]')?.textContent==='已保存在本机');
+  await page.click('.lf-savebar '+action('save'));await page.waitForSelector('[data-lf-conflict]:not([hidden])');assert.equal(await page.evaluate(()=>document.querySelector('[data-lf-field="article-title"]').value),'窗口A未保存的文字，应保留');
+  const backupPromise=page.waitForEvent('download');await page.click(action('backup-edits'));await (await backupPromise).saveAs(path.join(output,'conflict-edits.json'));await page.click(action('compare-server'));await page.waitForFunction(()=>document.querySelector('[data-lf-comparison]')?.textContent.includes('窗口B已保存的新版本'));await page.screenshot({path:path.join(output,'conflict-desktop.png'),fullPage:true});await other.close();passed('两个实际页面409冲突保留输入，可下载副本与比较新版');
+  await page.goto(origin);await page.click('[data-action="new"] >> nth=0');await page.fill('#new-topic','合成验收：创业日志');await page.selectOption('#new-kind','article');await page.click('#create-project');await page.waitForSelector('[data-lf-source-note]');await tab('article');await page.click(action('story-type','[data-value="diary"]'));await page.fill(field('article-bodyMd'),'今天只记录一次选择。这是合成验收，不是用户真实裸辞经历。');await save();await page.click('.lf-task summary');await page.click(action('prepare-task','[data-kind="article"]'));await page.waitForFunction(()=>document.querySelector('[data-lf-task-output="article"]')?.value.includes('Viral Writer'));
+  assert.match(await page.evaluate(()=>document.querySelector('[data-lf-task-output="article"]').value),/Humanizer-zh/);await page.click(action('article-preview'));await page.waitForSelector('[data-lf-article-frame]');await page.click('[data-lf-article-ack]');await page.click(action('article-approve'));await page.waitForFunction(()=>document.querySelector('[data-lf-article-badge]')?.textContent==='本版长文已审核');await page.reload();await page.waitForSelector('[data-lf-source-note]');p=await get();assert.equal(p.article.storyType,'diary');assert.equal(p.tasks.length,0);assert.equal(p.runtime.articleApproved,true);passed('创业日志技能路由、独立审核、重载无重复任务');
+  await checkCardsUI(task,path.join(output,'cards'),origin);passed('旧短图卡全链路与430真图导出回归');
+  const result={...run,status:'pass',finishedAt:new Date().toISOString(),passed:results.length,browser:'ego-lite',syntheticOnly:true,remoteWrites:0,formalPublishing:0,results};await fs.writeFile(path.join(output,'results.json'),JSON.stringify(result,null,2));console.log(JSON.stringify(result));
+}
+if(process.argv[1]===fileURLToPath(import.meta.url)){
+  const directory=await fs.mkdtemp(path.join(os.tmpdir(),'xiaoxian-longform-ui-')),output=path.resolve(process.env.STUDIO_UI_OUTPUT||path.join(os.tmpdir(),'xiaoxian-longform-ui'));
+  const env={...process.env,STUDIO_PORT:String(port),STUDIO_DATA_DIR:directory};delete env.STUDIO_DRAFT_DRIVER;
+  const server=spawn(process.execPath,[path.join(root,'server.mjs')],{cwd:root,env,stdio:['ignore','pipe','pipe']});
+  try{await new Promise((resolve,reject)=>{server.stdout.once('data',resolve);server.once('error',reject);server.once('exit',()=>reject(Error('隔离服务未启动')));});
+    const space=process.env.STUDIO_EGO_SPACE,code=`const task=await taskSpace(${space?Number(space):JSON.stringify('小苋 · 长文验收')});console.log({spaceId:task.spaceId});const {checkLongformUI}=await import(${JSON.stringify(fileURLToPath(import.meta.url))});await checkLongformUI(task,${JSON.stringify(output)});${space?'':'await task.finish({keep:[]});'}`;
+    const child=spawn('ego-browser',['nodejs','-e',code],{stdio:'inherit'});await new Promise((resolve,reject)=>{child.once('error',reject);child.once('exit',code=>code===0?resolve():reject(Error('长文Ego验收未通过')));});
+  }catch(error){let result={};try{result=JSON.parse(await fs.readFile(path.join(output,'results.json'),'utf8'));}catch{}await fs.mkdir(output,{recursive:true});await fs.writeFile(path.join(output,'results.json'),JSON.stringify({...result,status:'fail',finishedAt:new Date().toISOString(),error:error.message},null,2));throw error;}finally{server.kill('SIGINT');await new Promise(r=>server.once('exit',r));await fs.rm(directory,{recursive:true,force:true});}
+}

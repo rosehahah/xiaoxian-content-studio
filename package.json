@@ -1,6 +1,6 @@
 {
   "name": "xiaoxian-studio",
-  "version": "1.0.0",
+  "version": "1.3.0",
   "type": "module",
   "scripts": {
     "build": "node build.mjs",
@@ -10,12 +10,15 @@
     "test:cover-ui": "node scripts/check-cover-ui.mjs",
     "test:topics-ui": "node scripts/check-topics-ui.mjs",
     "test:draft-ui": "node scripts/check-ego-draft-ui.mjs",
-    "prestart": "npm run build"
+    "test:overseas-ui": "node scripts/check-overseas-draft-ui.mjs",
+    "prestart": "npm run build",
+    "test:ci": "node scripts/check-ci-tests.mjs",
+    "test:longform-ui": "node scripts/check-longform-ui.mjs"
   },
   "keywords": [],
   "author": "小苋AI圈 (https://github.com/rosehahah)",
   "license": "Apache-2.0",
-  "description": "面向微信公众号、小红书和抖音的本机内容创作、图卡审核与草稿工作台",
+  "description": "本机图卡、独立长文、平台原生改写与HTML离线交付工作台",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/rosehahah/xiaoxian-content-studio.git"

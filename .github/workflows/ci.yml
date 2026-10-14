@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'codex/**']
   pull_request:
     branches: [main]
 
@@ -19,6 +19,8 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - run: node scripts/preflight.mjs install
       - run: npm ci
+      - run: node scripts/preflight.mjs build
       - run: npm run build
-      - run: npm test
+      - run: npm run test:ci

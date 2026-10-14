@@ -1,13 +1,30 @@
+import {ensureContentFields,validateContentFields} from './content-schema.mjs';
 import {validatePlanning} from './planning.mjs';
 import {validateCreative} from './creative.mjs';
 import {ICON_IDS} from './icon-ids.mjs';
-export const SCHEMA = 1;
+export const SCHEMA = 2;
 // Resource ceilings protect the local editor; they are not editorial targets.
 export const MAX_CARDS = 20;
 export const CARD_KINDS = ['editorial','cover','cabinet','steps','clean','prompt'];
 export const BLOCK_TYPES = ['text','list','steps','compare','callout'];
 export const PAGE_LAYOUTS = ['flow','split','feature'];
-export const PLATFORMS = {wechat:{name:'微信公众号',title:20,text:1000,tags:10},xiaohongshu:{name:'小红书',title:20,text:1000,tags:10},douyin:{name:'抖音',title:20,text:1000,tags:5}};
+export const PLATFORMS = {
+  wechat:{name:'微信公众号',title:20,text:1000,tags:10},
+  xiaohongshu:{name:'小红书',title:20,text:1000,tags:10},
+  douyin:{name:'抖音',title:20,text:1000,tags:5},
+  // These article ceilings are local resource limits, not platform policies.
+  substack:{name:'Substack',title:200,text:100000,tags:10,overseas:true,longform:true,subtitle:true,kind:'article',deliveryMode:'browser'},
+  x:{name:'X Articles',title:200,text:100000,tags:0,overseas:true,longform:true,kind:'article',deliveryMode:'api'},
+  threads:{name:'Threads',title:200,text:10000,tags:1,overseas:true,longform:true,kind:'queue',deliveryMode:'local_queue'},
+};
+export const OVERSEAS_PLATFORMS = ['substack','x','threads'];
+export const platformCopyKey = copy => fingerprint({title:copy.title,subtitle:copy.subtitle||'',body:copy.body,tags:copy.tags});
+export function normalizePlatforms(p) {
+  if(p.platforms&&typeof p.platforms==='object'&&!Array.isArray(p.platforms))for(const key of OVERSEAS_PLATFORMS){
+    if(p.platforms[key]===undefined)p.platforms[key]={title:'',body:'',tags:[],...(key==='substack'?{subtitle:''}:{}),delivery:null};
+  }
+  return ensureContentFields(p);
+}
 export const count = value => Array.from(String(value || '')).length;
 export const fingerprint = value => {
   let h = 2166136261;
@@ -24,10 +41,14 @@ export function validatePlatform(p, key) {
   const text = [copy.body,...copy.tags.map(x=>'#'+x)].filter(Boolean).join('\n');
   const errors=[],warnings=[];
   if (!copy.title.trim()) errors.push('请填写标题');
+  if (rule.overseas&&!copy.body.trim()) errors.push('请填写正文');
   if (count(copy.title)>rule.title) errors.push('标题超过 '+rule.title+' 字');
   if (count(text)>rule.text) errors.push('正文与话题合计超过 '+rule.text+' 字');
   if (copy.tags.length>rule.tags) errors.push('话题超过 '+rule.tags+' 个');
   if (copy.tags.some(x=>!x.trim() || /[\s#]/.test(x))) errors.push('话题不能含空格或 #');
+  if (key==='substack' && count(copy.subtitle)>300) errors.push('副标题超过本机上限 300 字符');
+  if (rule.overseas && key!=='threads') warnings.push('标题与正文上限为本机资源限制，平台仍会单独校验');
+  if (key==='threads') warnings.push('当前仅保存工作台待发布稿；正文用于最长 10,000 字符的文字附件，不会写入远程草稿');
   if (key==='douyin' && (count(text)<120 || count(text)>180)) warnings.push('建议控制在 120–180 字左右');
   return {errors,warnings,textLength:count(text),titleLength:count(copy.title),tagCount:copy.tags.length};
 }
@@ -50,7 +71,7 @@ export function clearDelivery(p) {
   }
 }
 export function seedProject() {
-  return {
+  return normalizePlatforms({
     id:'github-mac-lesson-01',schema:SCHEMA,revision:0,stage:'content',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),
     content:{topic:'Mac 满了，项目又不敢删',series:'',takeaway:'先把能恢复的代码存好，再清理本地空间。',cards:[
       {kind:'cover',eyebrow:'给电脑减负 · 第 01 课',title:'Mac 满了，\n项目不敢删？',body:'我先把代码存好，\n再给电脑腾点空间。',note:'先学会一件小事，就够了。'},
@@ -65,10 +86,10 @@ export function seedProject() {
       xiaohongshu:{title:'Mac满了，项目又不敢删',body:'项目越做越多，电脑却快装不下了。想删，又怕以后找不回来。\n\n我最近在学：给代码找一个“存档柜”。先存到 GitHub，试着取回来，确认能恢复，再清理本地。\n\n整理了 5 张小白也能看懂的图。最后一张可以直接发给 AI，让它先检查、讲理由。\n\n密钥、证书和素材另行备份，不确定的先别删。一起慢慢学会这些小事。',tags:['AI开发','GitHub入门','独立开发'],delivery:null},
       douyin:{title:'电脑满了，项目怎么存？',body:'用 AI 做项目，电脑越来越满，旧项目又不敢删？我也在慢慢学：先把代码存到 GitHub 私有仓库，再取回来验证，确认能恢复后才清理本地。这 5 张图只讲一件小事，最后一张是可以直接问 AI 的提示词。不确定的先别删，密钥、证书和素材要另行备份。先收藏，下次电脑空间不够时翻出来。',tags:['AI开发','GitHub入门'],delivery:null}
     }
-  };
+  });
 }
 export function validateProject(p) {
-  if (!p || typeof p!=='object' || p.schema!==SCHEMA || !/^[a-zA-Z0-9_-]{1,80}$/.test(p.id||'')) throw new Error('无效的项目文件');
+  if (!p || typeof p!=='object' || ![1,SCHEMA].includes(p.schema) || !/^[a-zA-Z0-9_-]{1,80}$/.test(p.id||'')) throw new Error('无效的项目文件');
   if (!p.content || typeof p.content.topic!=='string' || typeof p.content.takeaway!=='string' || typeof p.content.series!=='string' || !Array.isArray(p.content.cards) || p.content.cards.length>MAX_CARDS) throw new Error('项目内容格式错误');
   for(const c of p.content.cards) {
     if(!CARD_KINDS.includes(c.kind) || ['eyebrow','title','body','note'].some(k=>typeof c[k]!=='string' || c[k].length>3000)) throw new Error('图卡格式错误');
@@ -91,6 +112,13 @@ export function validateProject(p) {
     if(!p.visual.pageLayouts||typeof p.visual.pageLayouts!=='object'||Array.isArray(p.visual.pageLayouts))throw new Error('页面编排格式错误');
     for(const [index,layout] of Object.entries(p.visual.pageLayouts))if(!/^(0|[1-9]\d*)$/.test(index)||Number(index)>=p.content.cards.length||!PAGE_LAYOUTS.includes(layout))throw new Error('页面编排格式错误');
   }
-  for(const k of Object.keys(PLATFORMS)) if(!p.platforms?.[k] || typeof p.platforms[k].title!=='string' || typeof p.platforms[k].body!=='string' || !Array.isArray(p.platforms[k].tags) || p.platforms[k].tags.some(t=>typeof t!=='string')) throw new Error('平台配文格式错误');
+  normalizePlatforms(p);
+  if(p.overseasLanguage!==undefined&&!['en','zh','bilingual'].includes(p.overseasLanguage))throw new Error('海外适配语言无效');
+  for(const k of Object.keys(PLATFORMS)) {
+    const copy=p.platforms?.[k],rule=PLATFORMS[k];
+    if(!copy || typeof copy.title!=='string' || typeof copy.body!=='string' || !Array.isArray(copy.tags) || copy.tags.some(t=>typeof t!=='string') || copy.title.length>Math.max(rule.title,3000) || copy.body.length>(rule.overseas?200000:12000) || copy.tags.length>50 || copy.tags.some(t=>t.length>300)) throw new Error('平台配文格式错误');
+    if(copy.subtitle!==undefined&&(typeof copy.subtitle!=='string'||copy.subtitle.length>1000))throw new Error('副标题格式错误');
+  }
+  validateContentFields(ensureContentFields(p));
   return p;
 }

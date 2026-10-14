@@ -5,6 +5,8 @@ description: 用户要为小苋AI圈新建、改写或完成一期内容时，�
 
 先读项目 `WORKFLOW.md`，读取用户本期素材、简报与参考。网站项目结构见 `model.mjs`；本机项目可从 `http://localhost:4318/api/projects` 读取。已有内容保留原稿，用独立项目或可追溯版本改进。
 
+先根据用户目标选择作品：图卡与短帖继续下方图卡流程；公众号长文、经验教程、创业日志和国内/海外平台原生文章读取 `../xiaoxian-longform/SKILL.md`。长文无需先做图卡，也不沿用图卡审核门槛。海外渠道独立可选，国内完成不自动触发海外任务。收到 article-input/variant-input 接力时按其版本与事实依赖返回结果，不导入任何审核或远程成功状态。
+
 按主题选择方法：写作读取 `../xiaoxian-content-cards/SKILL.md`，视觉读取 `../xiaoxian-html-layout/SKILL.md`，需要平台配文时读取 `../xiaoxian-platform-copy/SKILL.md`。可使用会话中已有的相关写作与设计skill，不必每期全部使用。
 
 自主完成研究、结构选择、文字、概念预览与自检。中间选择由你判断，不把步骤拆成一串用户审批。参考图在 `content.brief.references` 时，将data保存为临时本地图片并实际查看；分析用户备注指出的视觉特征。关键事实核实原始来源，不把参考文案或他人经历移植为本期事实。

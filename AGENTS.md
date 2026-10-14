@@ -6,6 +6,10 @@
 
 做内容读取 `.agents/skills/xiaoxian-content-cards/SKILL.md`；做图卡读取 `.agents/skills/xiaoxian-html-layout/SKILL.md`；平台配文读取 `.agents/skills/xiaoxian-platform-copy/SKILL.md`。均为项目原创规则，研究取舍见 `research/创作方法研究.md`。
 
+长文与平台原生改写读取 `.agents/skills/xiaoxian-longform/SKILL.md`。经验教程复用用户配置的小苋写作系统及真实实践SOP；创业日志按用户要求使用 Viral Writer 与中文 Humanizer，入口缺失时明确使用替代规则。文章无需图卡即可独立预览和审核。国内与海外渠道分别选择，英文长文以中文稿和原始证据为材料重新组织，不做通稿直译。
+
+本版默认仅导出，远程连接器未经真实账号验收而禁用。模型结果不能带审核字段；Agent不能替用户确认真实内容。测试中的用户操作只允许独立临时数据中的明确合成fixture。安装、构建、迁移和打包前执行磁盘空间预检；最终发行须保留同一SHA的本地Ego、CI、包安装与独立复核证据。
+
 本机端口4318，数据 `.local-data`。测试必须使用独立数据目录，不把测试审核写进正式数据。修改后运行 npm run build 和 npm test，视觉功能在浏览器检查。不代替用户审核正式样例，不执行正式发布。
 
 同系列新建或改写内容，先读 `research/已确认系列基准.md`，并查看工作台最近有效的已审核成图、正文与配文。模板参数不能代替实际成图。复盘类任务应查实际草稿快照及渲染链路，区分执行错误与项目沉淀遗漏。

@@ -1,0 +1,196 @@
+{
+  "schemaVersion": "1.0.0",
+  "reviewedDate": "2026-10-15",
+  "purpose": "小苋工作台内容策略档案；用于能力展示与后续适配器设计，不代表已经接通、获得账号权限或授予发布授权。",
+  "workflow": {
+    "default": "先完成国内内容，再由用户按需独立选择海外渠道；海外发布不自动随国内发布触发。",
+    "overseasAdaptation": "国内成品、原始资料与证据共同作为输入，按海外读者和目标格式重新立论、写作与排版。",
+    "graphicContent": "短帖和图卡属于内容格式；不预设 sprite 素材需求。英文内容确定后重新渲染图片文字。",
+    "qualityGate": "事实与证据核对、平台格式预览、AI与商业披露检查、授权检查、发布状态回读。",
+    "statusSemantics": "接口响应、媒体容器、草稿、提交审核、审核通过、公开发布与群发/邮件发送必须分别记录。",
+    "editorialDisclaimer": "editorialRole、audience 与 contentStandards 是编辑策略建议，不是官方算法规律或效果保证。",
+    "unknownSemantics": "unknown 表示本次没有充分核实；不表示平台不存在该能力。"
+  },
+  "platforms": [
+    {
+      "id": "wechat",
+      "channel": "微信公众号",
+      "formats": ["native_long_article", "image_text_article"],
+      "editorialRole": "国内长文主阵地；经验传授和真实创业日志均可建立连续内容。",
+      "audience": ["希望用 AI 完成具体工作的读者", "独立开发者与小团队", "关注个人创业过程的订阅读者"],
+      "contentStandards": ["经验文前置可获得的结果，以真实成品和步骤证明；给出可复制方法与适用边界。", "创业日志保留真实事件、选择、感受与反思，不能虚构亲历、对话、收益或时间数字。", "预览需检查手机阅读、图片功能、图注、链接与段落密度。"],
+      "publicApi": {"status": "official_api_documented_but_account_unverified", "capabilities": ["draft_add", "draft_get", "freepublish_submit", "publish_status_lookup"], "notes": "国内研究 agent 确认官方文档入口；本次官方站抓取未成功，接口细则和账号实际资格仍须对照文档核验。"},
+      "draft": {"status": "documented_account_unverified", "notes": "官方草稿箱接口有文档。草稿写入授权与正式发布授权分开；现有授权下应更新同一草稿并回读。"},
+      "publish": {"status": "documented_account_unverified", "notes": "freepublish 提交与状态查询有官方文档；提交不能直接等同公开发布，发布不能直接等同群发。"},
+      "readback": {"status": "documented_account_unverified", "notes": "草稿正文回读与发布状态回读分开；数据分析权限未核实。"},
+      "permissions": {"status": "unknown", "notes": "当前账号类型、认证资格、接口权限、发布权限与群发权限尚未核实；不读取凭证。"},
+      "automationPolicy": {"status": "official_api_preferred", "notes": "优先已授权官方接口，未知资格时导出并使用原生后台；不能将当前策略需求视为实际发布授权。"},
+      "aiDisclosure": {"status": "legal_requirement_verified_platform_flow_unknown", "notes": "国内生成合成内容标识办法第十条要求用户发布生成合成内容时主动声明并使用平台标识功能；微信公众号当前具体标识入口尚未核实。"},
+      "verifiedDate": "2026-10-15",
+      "sources": [
+        {"title": "微信公众号新增草稿官方文档", "url": "https://developers.weixin.qq.com/doc/offiaccount/Draft_Box/Add_draft.html", "verification": "official_entry_identified_fetch_incomplete"},
+        {"title": "微信公众号发布能力官方文档", "url": "https://developers.weixin.qq.com/doc/offiaccount/Publish/Publish.html", "verification": "official_entry_identified_fetch_incomplete"},
+        {"title": "人工智能生成合成内容标识办法", "url": "https://www.cac.gov.cn/2025-03/14/c_1743654684782215.htm", "verification": "primary_source_verified_by_domestic_channels"}
+      ],
+      "unknowns": ["当前账号是否有相应接口及发布/群发资格", "当前官方文档完整细则", "平台AI标识入口和字段", "文章数据分析接口与权限"]
+    },
+    {
+      "id": "zhihu",
+      "channel": "知乎",
+      "formats": ["native_long_article", "answer"],
+      "editorialRole": "以具体问题承接国内搜索与讨论，经验教程优先于通用宣发。",
+      "audience": ["正在寻找 AI 工作流解决方案的提问者", "需要证据和方法比较的专业读者"],
+      "contentStandards": ["文章先明确问题与适用人群；回答版本必须直接回应题目。", "用案例、方法、失败条件与来源支撑判断，补齐读者不知道的背景。", "产品介绍应围绕如何解决问题，避免把公众号全文原样搬到答案。"],
+      "publicApi": {"status": "unknown", "notes": "未核实可供工作台使用的官方开放长文/回答发布 API；不能据此断言不存在。"},
+      "draft": {"status": "export_only_recommended", "notes": "首期提供目标格式预览与复制/导出；原生后台草稿流程需后续实测。"},
+      "publish": {"status": "native_editor_manual_recommended", "notes": "未核实自动发布许可与官方发布接口，默认由用户在原生编辑器完成发布。"},
+      "readback": {"status": "unknown", "notes": "官方文章状态、内容回读与运营指标接口均未核实。"},
+      "permissions": {"status": "unknown", "notes": "账号资格、应用接入和正文发布权限未核实。"},
+      "automationPolicy": {"status": "unknown_export_only", "notes": "当前自动化协议全文与无人值守许可未核实；不以 Cookie MCP 或浏览器模拟替代已核实授权。"},
+      "aiDisclosure": {"status": "label_existence_verified_current_flow_unverified", "notes": "官方活动可确认“包含AI辅助创作”标签存在；2026 年当前完整规则和入口尚未核实。国内标识办法的用户声明义务适用。"},
+      "verifiedDate": "2026-10-15",
+      "sources": [
+        {"title": "知乎官方活动及AI辅助创作标签", "url": "https://www.zhihu.com/parker/campaign/1678437528674504704", "verification": "primary_source_verified_by_domestic_channels"},
+        {"title": "知乎官方入口（具体接入待核验）", "url": "https://www.zhihu.com/", "verification": "official_entry_only"},
+        {"title": "人工智能生成合成内容标识办法", "url": "https://www.cac.gov.cn/2025-03/14/c_1743654684782215.htm", "verification": "primary_source_verified_by_domestic_channels"}
+      ],
+      "unknowns": ["官方长文与回答发布API", "当前自动化协议和无人值守许可", "原生草稿及发布回读能力", "当前AI披露入口与规则全文"]
+    },
+    {
+      "id": "juejin",
+      "channel": "稀土掘金",
+      "formats": ["native_technical_article"],
+      "editorialRole": "国内技术实践分发，承接工作台搭建、开源版使用与工程复盘。",
+      "audience": ["开发者", "希望复现 AI 工具与工作流的工程人员"],
+      "contentStandards": ["先交代环境、版本、前置条件和最终效果，再写可复现步骤。", "关键操作应有代码、截图或验证结果，并写出限制与排错方法。", "创业故事仅保留与技术选择、产品实现直接相关的部分。"],
+      "publicApi": {"status": "unknown", "notes": "未核实官方开放发文 API；第三方 Cookie MCP 不能当作官方 API。"},
+      "draft": {"status": "export_only_recommended", "notes": "首期生成适合掘金的 Markdown、图片与预览，原生草稿流程后续核验。"},
+      "publish": {"status": "native_editor_manual_recommended", "notes": "在未核实官方发文接口与许可前使用导出及原生编辑器发布。"},
+      "readback": {"status": "unknown", "notes": "官方正文、发布状态和运营指标回读接口未核实。"},
+      "permissions": {"status": "unknown", "notes": "官方应用接入、发布资格和scope未核实。"},
+      "automationPolicy": {"status": "unauthorized_access_restricted_export_only", "notes": "现行协议限制未经授权访问、反向工程及使用工具干扰平台；该条款不能泛化为禁止一切官方集成。"},
+      "aiDisclosure": {"status": "verified", "notes": "2025-12-24 生效协议第5.4条要求显著标识生成信息，不应删改AI助手标识；自然化编辑不替代披露。"},
+      "verifiedDate": "2026-10-15",
+      "sources": [
+        {"title": "稀土掘金用户协议（2025-12-24生效）", "url": "https://lf3-cdn-tos.draftstatic.com/obj/ies-hotsoon-draft/juejin/86857833-55f6-4d9e-9897-45cfe9a42be4.html", "verification": "primary_source_verified_by_domestic_channels"},
+        {"title": "稀土掘金官方入口（API待核验）", "url": "https://juejin.cn/", "verification": "official_entry_only"}
+      ],
+      "unknowns": ["官方开放发文API及授权路径", "原生草稿流程", "官方正文、状态和运营指标回读接口"]
+    },
+    {
+      "id": "bilibili",
+      "channel": "哔哩哔哩",
+      "formats": ["native_article", "video_companion_content"],
+      "editorialRole": "长文承接实践方法；后续配合操作演示视频形成可观看、可照做的教程。",
+      "audience": ["通过演示学习 AI 工具的创作者", "偏好实践过程和成品展示的读者"],
+      "contentStandards": ["突出结果、操作步骤和真实成品，长文与演示素材保持一致。", "将文章提交、审核和公开状态清楚分开；不能用提交成功作为已公开的证据。", "视频格式仅为内容规划，本档案未核实视频投稿API。"],
+      "publicApi": {"status": "official_article_api_verified_account_unverified", "capabilities": ["article_submit", "article_data_lookup"], "notes": "官方文章提交与文章数据文档已核实；不代表当前应用已入驻或当前用户已授权。"},
+      "draft": {"status": "unknown_local_draft_recommended", "notes": "未核实独立远端草稿接口；保留本地稿件与预览，不能把文章提交对象称为已确认的远端草稿。"},
+      "publish": {"status": "submit_for_review_supported_permission_required", "notes": "ATC_BASE 需申请与用户授权；正文图片应使用官方上传接口产生URL；提交后审核期间不公开。"},
+      "readback": {"status": "article_data_api_verified_permission_required", "notes": "文章数据查询需 ATC_DATA 授权；实际scope、可读字段与最终公开状态确认路径仍须接入实测。"},
+      "permissions": {"status": "documented_account_unverified", "notes": "开放平台入驻涉及注册、资质认证、应用与集成；ATC_BASE 与 ATC_DATA 均不能假设已获批。"},
+      "automationPolicy": {"status": "official_open_platform_path", "notes": "按开放平台申请、授权与接口规范对接；不以未授权网页模拟替代scope。"},
+      "aiDisclosure": {"status": "verified", "notes": "2026 官方公告说明AI标识入口上移，漏标可能补标、打回或下架；当前上传与发布流程应保留标识。"},
+      "verifiedDate": "2026-10-15",
+      "sources": [
+        {"title": "B站文章提交官方文档", "url": "https://open.bilibili.com/doc/4/b14b77b6-8889-8c8b-2e83-17c5a4c550fb", "verification": "primary_source_verified_by_domestic_channels"},
+        {"title": "B站文章数据官方文档", "url": "https://open.bilibili.com/doc/4/46903ddc-1264-ddac-a3c7-559d12f32118", "verification": "primary_source_verified_by_domestic_channels"},
+        {"title": "B站开放平台入驻", "url": "https://member.bilibili.com/open", "verification": "primary_source_verified_by_domestic_channels"},
+        {"title": "B站AI标识官方公告", "url": "https://www.bilibili.com/opus/1202507670848798745", "verification": "primary_source_verified_by_domestic_channels"}
+      ],
+      "unknowns": ["当前应用和用户实际获批scope", "独立远端草稿接口", "正文及最终公开状态的接入回读验证", "视频投稿API能力"]
+    },
+    {
+      "id": "substack",
+      "channel": "Substack",
+      "formats": ["native_long_article", "email_newsletter", "note"],
+      "editorialRole": "海外长文主阵地与持续订阅关系；由国内成品按需生成独立英文版本。",
+      "audience": ["AI builders", "独立开发者与小团队", "关心真实构建过程与个人判断的英语读者"],
+      "contentStandards": ["按目标读者重新选择论点和结构，中文稿只是资料来源之一。", "具体场景、个人判断、证据、方法与取舍构成主线；创业日志应有选择与反思。", "给读者一个可执行行动，补齐国际读者所需背景，不虚构海外用户与结果。"],
+      "publicApi": {"status": "public_metadata_api_verified_publishing_unverified", "capabilities": ["public_creator_or_publication_information", "discovery_and_analytics_for_authorized_public_data"], "notes": "官方Developer API条款存在；已核实范围是公开作者/出版物资料及相关许可用途。未核实正文草稿、文章发布或私有运营数据的公开官方接口，不能表述为“Substack没有API”。"},
+      "draft": {"status": "native_editor_supported_api_unverified", "notes": "原生编辑器自动保存草稿，可分享秘密草稿链接。首期工作台生成预览与导出稿。"},
+      "publish": {"status": "native_editor_supported_api_unverified", "notes": "原生支持预约，并可选择网页、邮件及Substack App inbox分发。工作台自动正文发布能力待官方接口与账号验证。"},
+      "readback": {"status": "native_analytics_supported_private_api_unverified", "notes": "后台有跨网页、邮件和App的帖子浏览数据；工作台私有指标API尚未核实。邮件发送后编辑只更新网页/App，不能直接重发同一封邮件。"},
+      "permissions": {"status": "publishing_api_unknown", "notes": "Developer API具体访问资格、技术文档与正文发布许可尚未充分核实；不以第三方逆向接口作官方依据。"},
+      "automationPolicy": {"status": "api_terms_verified_publishing_automation_unknown", "notes": "官方API条款限制绕过限额、滥用公开资料及未经许可用途；未核实网页自动发布的许可，首期使用导出与原生发布。"},
+      "aiDisclosure": {"status": "transparency_feature_verified_general_mandate_unverified", "notes": "已有Scan for AI text与How I make this透明度说明字段；humanizer目标是自然表达与声音保留，不能承诺隐藏AI来源、规避披露或通过检测。"},
+      "verifiedDate": "2026-10-15",
+      "sources": [
+        {"title": "Substack发布与草稿说明", "url": "https://support.substack.com/hc/en-us/articles/360037831771-How-do-I-publish-a-new-post-on-Substack", "verification": "primary_source_verified"},
+        {"title": "Substack Developer API条款", "url": "https://substack.com/api-tos", "verification": "primary_source_verified"},
+        {"title": "Substack帖子后台说明", "url": "https://support.substack.com/hc/en-us/articles/15853567274772-Guide-to-your-Substack-Posts-page", "verification": "primary_source_verified"},
+        {"title": "Substack AI透明度功能", "url": "https://support.substack.com/hc/en-us/articles/50891130623508-How-can-I-detect-AI-on-Substack", "verification": "primary_source_verified"}
+      ],
+      "unknowns": ["可供工作台使用的公开正文草稿和发布API", "Developer API的账号资格与完整技术契约", "私有运营数据回读API", "网站自动发布许可", "所有AI辅助文章是否存在统一强制披露要求"]
+    },
+    {
+      "id": "linkedin",
+      "channel": "LinkedIn",
+      "formats": ["feed_text_post", "feed_image_post", "feed_multi_image_post", "feed_document_post", "external_article_link_card", "native_article", "native_newsletter_edition"],
+      "editorialRole": "短帖、图片和PDF建立专业曝光与合作入口；原生长文/newsletter用于持续专业专题。",
+      "audience": ["使用AI改进工作的专业人士", "小团队负责人", "潜在合作者与产品用户"],
+      "contentStandards": ["短帖围绕明确读者收益：问题或结果、真实背景、可执行发现、成品证据和一个讨论问题。", "图片/PDF应按英语读者阅读顺序重排，每页承担一个功能，英文确定后重新渲染。", "Articles/newsletter应有持续主题承诺、案例、方法与适用局限，不默认同步每篇国内稿。"],
+      "publicApi": {"status": "feed_posts_verified_native_articles_newsletter_unverified", "capabilities": ["feed_text_post", "feed_image_post", "feed_video_post", "feed_document_post", "feed_multi_image_post", "external_article_link_card", "member_post_analytics_with_permission"], "notes": "Posts API的Article是source URL、标题、描述、缩略图构成的外部链接卡片，不是原生Articles/newsletter正文发布接口。未核实适合本工作台的通用原生正文发布API。"},
+      "draft": {"status": "native_editor_available_api_draft_unverified", "notes": "工作台保留本地稿件；API创建帖子示例为PUBLISHED，不假设存在可用的远端草稿接口。原生长文编辑器与Page预约可使用。"},
+      "publish": {"status": "feed_posts_api_supported_permission_required", "notes": "优先对接短帖、图片、多图和PDF文档；原生Articles/newsletter首期导出后由用户通过编辑器发布。Page原生发布与预约有官方说明。"},
+      "readback": {"status": "permission_dependent", "notes": "API发布返回Post ID；正文读取与统计属于不同权限。个人统计可通过memberCreatorPostAnalytics读取，需r_member_postAnalytics；个人社交正文读取权限r_member_social受限。"},
+      "permissions": {"status": "documented_account_unverified", "notes": "个人发布需w_member_social；组织发布需w_organization_social及对应Page角色；读取与统计授权单独核验，不能由可写推断可读。"},
+      "automationPolicy": {"status": "website_automation_prohibited_official_api_required", "notes": "官方不允许第三方软件或浏览器扩展自动操作LinkedIn网站。采用获准的官方API；不能用浏览器Agent弥补原生长文API未核实的缺口。"},
+      "aiDisclosure": {"status": "content_credentials_verified_text_mandate_unverified", "notes": "LinkedIn采用C2PA Content Credentials展示部分媒体来源信息；未核实所有AI辅助文字是否存在统一标签义务。保留媒体来源凭证与适用披露，不声称标签必然影响或不影响分发。"},
+      "verifiedDate": "2026-10-15",
+      "sources": [
+        {"title": "LinkedIn Posts API", "url": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-06", "verification": "primary_source_verified"},
+        {"title": "LinkedIn个人帖子统计API", "url": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/members/post-statistics?view=li-lms-2026-07", "verification": "primary_source_verified"},
+        {"title": "LinkedIn Page原生文章与newsletter发布", "url": "https://www.linkedin.com/help/linkedin/answer/a563519", "verification": "primary_source_verified"},
+        {"title": "LinkedIn网站自动化规则", "url": "https://www.linkedin.com/help/linkedin/answer/a1341543", "verification": "primary_source_verified"},
+        {"title": "LinkedIn Content Credentials", "url": "https://www.linkedin.com/help/linkedin/answer/a6282984/", "verification": "primary_source_verified"}
+      ],
+      "unknowns": ["当前应用实际获批产品与scope", "通用公开原生Articles/newsletter正文发布API", "可用远端API草稿与预约契约", "所有AI辅助文字是否有统一披露要求"]
+    },
+    {
+      "id": "x",
+      "channel": "X",
+      "formats": ["short_text_post", "image_post", "multi_image_post", "reply_thread", "native_article"],
+      "editorialRole": "短帖与多图展示一个发现、一个成果或一次构建更新；Articles可作为海外长文实验。",
+      "audience": ["AI builders", "独立开发者", "关心工具、产品和构建过程的英语读者"],
+      "contentStandards": ["每条短帖有独立价值，先给结论或成品，再补解释与来源。", "多图按结果、关键步骤、可复制资源组织，不是截图堆砌。", "原生长文按X读者重新立论，不能只截断或逐段翻译国内成品。"],
+      "publicApi": {"status": "short_posts_and_articles_verified_account_unverified", "capabilities": ["post_create", "media_upload", "article_draft_create", "article_publish"], "notes": "短帖API与Articles API均有官方文档。Articles支持POST /2/articles/draft以及POST /2/articles/{article_id}/publish，正文采用DraftJS content state。"},
+      "draft": {"status": "native_article_api_supported_permission_required", "notes": "Articles可创建远端草稿并返回Article ID；短帖工作台本地待发布队列不能冒充远端草稿。"},
+      "publish": {"status": "official_api_supported_permission_required", "notes": "媒体先上传，再创建帖子；帖子支持最多4张图片。Articles草稿需单独调用发布接口并保存返回Post ID。"},
+      "readback": {"status": "post_identity_verified_full_metrics_unverified", "notes": "保存Article ID与Post ID并使用获准的读取接口确认实际公开结果。当前账号可访问的正文、指标字段、额度及计费未实测。"},
+      "permissions": {"status": "documented_account_unverified", "notes": "Articles需用户认证OAuth 1.0a或OAuth 2.0 PKCE，文档列tweet.read、tweet.write和users.read；当前访问资格、账号权益、额度及费用须另验。"},
+      "automationPolicy": {"status": "official_api_required_website_scripting_prohibited", "notes": "官方不允许脚本操纵X网站代替API，也限制重复或近似重复发帖及垃圾自动化。发布授权与自动互动授权分开。"},
+      "aiDisclosure": {"status": "ai_media_field_verified_general_text_mandate_unverified", "notes": "创建帖子API已有made_with_ai字段，用于披露AI生成媒体；不能据此推断所有AI辅助文字适用同一字段。自动账号还有独立标签机制。"},
+      "verifiedDate": "2026-10-15",
+      "sources": [
+        {"title": "X创建帖子API", "url": "https://docs.x.com/x-api/posts/create-post", "verification": "primary_source_verified"},
+        {"title": "X Articles草稿与发布API", "url": "https://docs.x.com/x-api/articles/introduction", "verification": "primary_source_verified"},
+        {"title": "X自动化规则", "url": "https://help.x.com/en/rules-and-policies/x-automation?lang=browser", "verification": "primary_source_verified"},
+        {"title": "X自动账号标签", "url": "https://help.x.com/en/using-x/automated-account-labels", "verification": "primary_source_verified"}
+      ],
+      "unknowns": ["当前应用与账号实际可用的Articles权限", "当前API额度、价格与账号权益", "运营指标的字段、读取权限和成本", "AI辅助文字的具体披露义务"]
+    },
+    {
+      "id": "threads",
+      "channel": "Threads",
+      "formats": ["text_post", "image_post", "video_post", "carousel_post"],
+      "editorialRole": "更自然的工作进展、困惑与方法片段；适合国内成品按需拆成轻量英语短帖与图卡。",
+      "audience": ["关注创作与AI工具实践的英语读者", "希望交流构建过程的创作者"],
+      "contentStandards": ["给图片提供具体语境与一个可讨论点，不只贴长文摘要。", "每个carousel单元承担一个信息功能，保持可独立阅读。", "正文和图片英语自然化，保留真实过程与不确定性。"],
+      "publicApi": {"status": "official_api_verified_account_unverified", "capabilities": ["text_image_video_carousel_publish", "post_details_lookup", "post_and_account_insights"], "notes": "能力通过Meta官方Postman集合核实；官方开发文档站本次返回429，不用第三方镜像补造未读细则。"},
+      "draft": {"status": "media_container_supported_durable_draft_unverified", "notes": "创建媒体容器通常是发布前步骤，不能把容器等同长期草稿或公开帖子。本地编辑稿与待发布队列应单独持久保存。"},
+      "publish": {"status": "official_api_supported_permission_required", "notes": "通常为创建容器后调用threads_publish；文字存在auto_publish_text选项。必须保存最终发布ID，不能仅凭容器创建成功报告已发布。"},
+      "readback": {"status": "official_api_supported_permission_required", "notes": "官方集合提供帖子详情以及帖子、账号insights请求。指标与可用性按授权及实际返回校验，缺失值不记成零。"},
+      "permissions": {"status": "documented_account_unverified", "notes": "需Threads OAuth及相应权限；基本发布涉及threads_basic、threads_content_publish，insights涉及threads_manage_insights。账号授权、审核和令牌有效性未实测。"},
+      "automationPolicy": {"status": "official_api_path_verified_full_policy_unverified", "notes": "优先Meta官方API；发布权限不自动授权评论、私信或自动互动。完整现行自动化政策未在本次核实。"},
+      "aiDisclosure": {"status": "unknown", "notes": "本次未充分核实Threads当前AI标识字段、具体范围与统一披露义务；不能据此假定无需披露。"},
+      "verifiedDate": "2026-10-15",
+      "sources": [
+        {"title": "Meta官方Threads API集合", "url": "https://www.postman.com/meta/threads/documentation/dht3nzz/threads-api?entity=request-34203612-74fb48b1-ad1a-480e-b200-4dcdb8126a2f", "verification": "primary_source_verified"},
+        {"title": "Meta官方Threads帖子insights", "url": "https://www.postman.com/meta/threads/request/434u2bd/get-post-insights", "verification": "primary_source_verified"},
+        {"title": "Meta Threads开发文档（后续细则待核验）", "url": "https://developers.facebook.com/docs/threads/posts", "verification": "official_entry_fetch_returned_429"}
+      ],
+      "unknowns": ["当前应用与账号实际scope和审核状态", "完整最新额度、格式限制和容器寿命", "各指标对目标账号与格式的实际可用性", "当前AI披露规则和标识字段", "完整自动化政策"]
+    }
+  ]
+}
