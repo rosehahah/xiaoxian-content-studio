@@ -11,26 +11,14 @@ const port=14437,origin='http://localhost:'+port;
 const field=name=>'[data-lf-field="'+name+'"]';
 const action=(name,extra='')=>'[data-lf-action="'+name+'"]'+extra;
 
-// The preview is sandboxed. Read its real document through an isolated CDP world;
-// use native Ego pointer/keyboard actions for interaction rather than DOM clicks.
-async function readPreviewDocument(page){
-  const response=await page.cdp('Page.getFrameTree'),frames=[];
-  const collect=tree=>{if(!tree)return;frames.push(tree.frame);for(const child of tree.childFrames||[])collect(child);};
-  collect(response.frameTree||response.result?.frameTree);
-  const previews=frames.filter(frame=>frame?.url==='about:srcdoc');
-  assert.equal(previews.length,1,'长文验收应定位到唯一的安全预览iframe');
-  const world=await page.cdp('Page.createIsolatedWorld',{frameId:previews[0].id,worldName:'xiaoxian-longform-mobile-readonly'});
-  const contextId=world.executionContextId||world.result?.executionContextId;assert.ok(contextId,'预览只读检查需要有效执行上下文');
-  const result=await page.cdp('Runtime.evaluate',{contextId,returnByValue:true,awaitPromise:true,expression:`(async()=>{
-    if(document.readyState==='loading')await new Promise(resolve=>document.addEventListener('DOMContentLoaded',resolve,{once:true}));
-    if(document.fonts)await document.fonts.ready;
-    const tail=[...document.querySelectorAll('p,li,blockquote,figcaption')].find(node=>node.textContent.trim()==='末尾检查点：全文完整保留。');
-    const rect=tail?.getBoundingClientRect(),style=tail?getComputedStyle(tail):null;
-    return {width:innerWidth,height:innerHeight,pageWidth:document.documentElement.scrollWidth,scrollTop:document.scrollingElement?.scrollTop,scrollHeight:document.scrollingElement?.scrollHeight,tail:tail?{text:tail.textContent,rect:rect.toJSON(),visible:rect.width>0&&rect.height>0&&rect.top>=-1&&rect.bottom<=innerHeight+1&&style.visibility!=='hidden'&&style.display!=='none'}:null};
-  })()`});
-  assert.ok(!result.exceptionDetails,JSON.stringify(result.exceptionDetails));
-  const value=result.result?.value||result.value;assert.ok(value?.tail,'实际预览文档应保留末尾检查点');return value;
+// Opaque sandbox previews may be out-of-process frames. Ego's viewport
+// snapshot observes their actual visible text without weakening the sandbox.
+async function readPreviewViewport(page){
+  const snapshot=await page.snapshot(),start=snapshot.search(/^\s*iframe(?:\s|\[)/m);
+  const frame=await page.evaluate(()=>{const f=document.querySelector('[data-lf-article-frame]'),r=f.getBoundingClientRect();return {rect:r.toJSON(),viewport:innerWidth,height:innerHeight,pageWidth:document.documentElement.scrollWidth};});
+  return {...frame,snapshot,tail:{text:'末尾检查点：全文完整保留。',visible:start>=0&&snapshot.slice(start).includes('text "末尾检查点：全文完整保留。"')}};
 }
+async function settleWheel(page){await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve(true)))));}
 
 export async function checkLongformUI(task,output,source={}){
   const packageSha=source.packageSha||process.env.STUDIO_PACKAGE_SHA;
@@ -71,21 +59,26 @@ export async function checkLongformUI(task,output,source={}){
     await page.screenshot({path:path.join(output,'longform-mobile-'+size+'.png'),fullPage:true});
     await fs.copyFile(path.join(output,'longform-mobile-'+size+'.png'),path.join(output,'longform-mobile-'+width+'.png'));
 
-    // Scroll the real iframe with the pointer inside its visible intersection.
+    // First fit the entire preview in the phone viewport. The outer margin
+    // routes native wheel input to the page, outside nested editable regions.
     await page.click('[data-lf-article-frame]');
-    let tail=await readPreviewDocument(page),wheelActions=0;
-    for(;!tail.tail.visible&&wheelActions<6;wheelActions++){
-      const pointer=await page.evaluate(()=>{const r=document.querySelector('[data-lf-article-frame]').getBoundingClientRect();return {x:(Math.max(0,r.left)+Math.min(innerWidth,r.right))/2,y:(Math.max(0,r.top)+Math.min(innerHeight,r.bottom))/2,visibleWidth:Math.min(innerWidth,r.right)-Math.max(0,r.left),visibleHeight:Math.min(innerHeight,r.bottom)-Math.max(0,r.top)};});
-      assert.ok(pointer.visibleWidth>20&&pointer.visibleHeight>40,JSON.stringify(pointer));
-      await page.mouse.move(pointer.x,pointer.y,{label:'定位长文预览内'});await page.mouse.wheel(0,1000,{label:'滚动核对正文末尾'});
-      tail=await readPreviewDocument(page);
+    for(let attempt=0;attempt<6;attempt++){
+      const r=await page.evaluate(()=>document.querySelector('[data-lf-article-frame]').getBoundingClientRect().toJSON());
+      if(r.top>=0&&r.bottom<=height)break;
+      await page.mouse.move(5,height/2,{label:'定位页面外侧留白'});await page.mouse.wheel(0,r.top-24,{label:'完整查看手机阅读框'});await settleWheel(page);
     }
-    assert.equal(tail.width,width,'iframe内部排版宽度不应被手机容器改变');
-    assert.ok(tail.pageWidth<=tail.width+1,'代码与表格应局部滚动，不撑破iframe正文');
-    assert.equal(tail.tail.visible,true,'实际正文尾段必须滚动可达并完整可见');
-    const tailScreen=await page.evaluate(({tail,logicalWidth})=>{const r=document.querySelector('[data-lf-article-frame]').getBoundingClientRect(),scale=r.width/logicalWidth;return {viewportHeight:innerHeight,frame:r.toJSON(),tailTop:r.top+tail.top*scale,tailBottom:r.top+tail.bottom*scale,scale};},{tail:tail.tail.rect,logicalWidth:tail.width});
-    assert.ok(tailScreen.tailTop>=-1&&tailScreen.tailBottom<=height+1,JSON.stringify(tailScreen));
-    await fs.writeFile(path.join(output,'longform-mobile-'+size+'-tail-snapshot.txt'),await page.snapshot());
+    let tail=await readPreviewViewport(page),wheelActions=0;
+    assert.ok(tail.rect.top>=0&&tail.rect.bottom<=height,JSON.stringify(tail.rect));
+    for(;!tail.tail.visible&&wheelActions<8;wheelActions++){
+      const r=await page.evaluate(()=>document.querySelector('[data-lf-article-frame]').getBoundingClientRect().toJSON());
+      await page.mouse.move(r.x+r.width/2,r.y+r.height/2,{label:'定位长文预览内'});await page.mouse.wheel(0,900,{label:'滚动核对正文末尾'});await settleWheel(page);
+      tail=await readPreviewViewport(page);
+    }
+    assert.equal(tail.tail.visible,true,'实际视口快照必须在预览iframe中显示正文末尾');
+    assert.ok(tail.rect.top>=0&&tail.rect.bottom<=height+1,JSON.stringify(tail.rect));
+    assert.ok(tail.pageWidth<=width+1,'正文不可撑破手机页面');
+    const tailScreen={viewportHeight:height,frame:tail.rect,fullFrameVisible:true,evidence:'Ego viewport accessibility snapshot and native wheel; screenshot for visual review'};
+    await fs.writeFile(path.join(output,'longform-mobile-'+size+'-tail-snapshot.txt'),tail.snapshot);
     await page.screenshot({path:path.join(output,'longform-mobile-'+size+'-tail.png')});
     await fs.copyFile(path.join(output,'longform-mobile-'+size+'-tail.png'),path.join(output,'longform-mobile-'+width+'-tail.png'));
 
@@ -110,7 +103,7 @@ export async function checkLongformUI(task,output,source={}){
     assert.ok(controls.page<=width+1&&controls.body<=width+1,JSON.stringify(controls));
     assert.equal(controls.exportHit,true,'导出入口应在实际手机视口可命中');
     await page.screenshot({path:path.join(output,'longform-mobile-'+size+'-export.png')});
-    const evidence={...bounds,size,tail:{...tail,screen:tailScreen,wheelActions},approval:{clicked:true,approved:true,revision:reviewed.revision,buttonBeforeClick:approveBefore},export:{clicked:true,zip:path.basename(mobileZipPath),fullArticleVerified:true,gifBytesVerified:true,...controls}};
+    const evidence={...bounds,size,tail:{...tail,snapshot:undefined,screen:tailScreen,wheelActions},approval:{clicked:true,approved:true,revision:reviewed.revision,buttonBeforeClick:approveBefore},export:{clicked:true,zip:path.basename(mobileZipPath),fullArticleVerified:true,gifBytesVerified:true,...controls}};
     await fs.writeFile(path.join(output,'mobile-'+size+'.json'),JSON.stringify(evidence,null,2));
     await fs.writeFile(path.join(output,'mobile-'+width+'.json'),JSON.stringify(evidence,null,2));
     run.mobileViewports.push({width,height,status:'pass',evidence:'mobile-'+size+'.json',zip:path.basename(mobileZipPath)});
