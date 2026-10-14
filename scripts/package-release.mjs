@@ -14,10 +14,14 @@ const MEDIA = /\.(?:png|jpe?g|gif|webp|avif|heic|svg|mp4|mov|webm|mp3|wav|m4a|pd
 const PUBLIC_MEDIA = new Set([
   'preview-cover.png', 'preview-materials.jpg', 'preview-workspace.jpg',
   'dist/xiaoxian-logo.png', 'dist/leaf.svg', 'dist/cover-references/social-atlas.png', 'assets/xiaoxian-wecom-qr.jpg',
-  'assets/star-history-light.svg', 'assets/star-history-dark.svg'
+  'assets/star-history.svg', 'assets/star-history-dark.svg'
 ]);
 
 export const sha256 = data => createHash('sha256').update(data).digest('hex');
+export function checkedPackageVersion(pkg,lock){
+  if(typeof pkg?.version!=='string'||pkg.version!==lock?.version||pkg.version!==lock?.packages?.['']?.version)throw new Error('package.json and both package-lock.json root versions must match.');
+  return pkg.version;
+}
 
 export function safeSourcePath(value) {
   return typeof value === 'string' && value.length > 0 && !/[\u0000-\u001f\u007f\\]/.test(value) &&
@@ -135,7 +139,8 @@ export async function createReleasePackage({repo = ROOT, sha, output, log = () =
     files.push({...entry, sha256: sha256(data)});
   }
   const packageData = await git(repo, ['show', commit + ':package.json']);
-  const version = JSON.parse(packageData).version;
+  const lockData = await git(repo, ['show', commit + ':package-lock.json']);
+  const version = checkedPackageVersion(JSON.parse(packageData),JSON.parse(lockData));
   if (typeof version !== 'string' || !/^[A-Za-z0-9._-]{1,80}$/.test(version)) throw new Error('Unsafe package version.');
   const basename = 'xiaoxian-content-studio-' + version + '-' + commit.slice(0, 12);
   const archive = path.join(output, basename + '.tar.gz');

@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import {ARCHIVE_PREFIX, RELEASE_POLICY_VERSION, MIN_RESERVE_BYTES, sha256, safeSourcePath, exclusionReason, highConfidenceSecret, parseArgs, preflight} from '../scripts/package-release.mjs';
-import {cleanEnvironment, validateManifest, validateTarListing, verifyExtractedFiles, testCounts} from '../scripts/check-release-package.mjs';
+import {ARCHIVE_PREFIX, RELEASE_POLICY_VERSION, MIN_RESERVE_BYTES, sha256, safeSourcePath, exclusionReason, highConfidenceSecret, parseArgs, preflight,checkedPackageVersion} from '../scripts/package-release.mjs';
+import {cleanEnvironment, validateManifest, validateTarListing, verifyExtractedFiles, testCounts, releaseGateStatus} from '../scripts/check-release-package.mjs';
 
 function sourceManifest() {
   return {
@@ -13,6 +13,20 @@ function sourceManifest() {
     files: [{path: 'server.mjs', mode: '100644', bytes: 4, gitBlob: 'c'.repeat(40), sha256: sha256('test')}]
   };
 }
+
+test('release validation cannot pass when required packaged Ego evidence is missing or incomplete',()=>{
+  assert.equal(releaseGateStatus([]),'incomplete');
+  assert.equal(releaseGateStatus([{name:'candidate-test',status:'passed'},{name:'R03-packaged-ego-flow',status:'not_run'}]),'incomplete');
+  assert.equal(releaseGateStatus([{name:'R03-packaged-ego-flow',status:'failed'}]),'incomplete');
+  assert.equal(releaseGateStatus([{name:'R03-packaged-ego-flow',status:'passed'}]),'passed');
+});
+
+test('archive version requires matching package and lock roots and keeps the actual README star-history asset',()=>{
+  assert.equal(checkedPackageVersion({version:'1.3.0'},{version:'1.3.0',packages:{'':{version:'1.3.0'}}}),'1.3.0');
+  assert.throws(()=>checkedPackageVersion({version:'1.3.0'},{version:'1.2.0',packages:{'':{version:'1.3.0'}}}),/must match/);
+  assert.throws(()=>checkedPackageVersion({version:'1.3.0'},{version:'1.3.0',packages:{'':{version:'1.2.0'}}}),/must match/);
+  assert.equal(exclusionReason('assets/star-history.svg'),null);
+});
 
 test('release paths exclude runtime data, dependencies, secrets, symlinks and private media', () => {
   for (const name of ['.local-data/projects.json', 'node_modules/library/index.js', 'outputs/evidence.json', 'nested/credentials/token.json', '.env', '.env.local', '.npmrc', 'key.pem', 'assets/private-photo.jpg', 'dist/issues/real-person/project.json', 'examples/github-tag-release-20261006/project.json']) assert.ok(exclusionReason(name), name);

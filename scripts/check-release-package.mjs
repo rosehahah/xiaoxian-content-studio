@@ -62,6 +62,10 @@ export function testCounts(output) {
   return result;
 }
 
+export function releaseGateStatus(phases) {
+  return phases.some(phase=>phase.name==='R03-packaged-ego-flow'&&phase.status==='passed')?'passed':'incomplete';
+}
+
 async function run(command, args, {cwd, env, logFile, timeout = 15 * 60 * 1000}) {
   const handle = await fs.open(logFile, 'w', 0o600);
   let output = '', timedOut = false;
@@ -258,8 +262,8 @@ export async function checkReleasePackage(args) {
         return {spaceId: Number(egoSpace), evidence: output, result};
       });
     } else report.phases.push({name: 'R03-packaged-ego-flow', status: 'not_run', reason: 'No existing STUDIO_EGO_SPACE was supplied; no TaskSpace was created.'});
-    report.status = 'passed';
-    report.kept = Boolean(args.keep);
+    report.status = releaseGateStatus(report.phases);
+    report.kept = Boolean(args.keep) || report.status !== 'passed';
     report.finishedAt = new Date().toISOString();
     await writeJson(path.join(evidence, 'release-check.json'), report);
     return report;
@@ -278,6 +282,7 @@ async function main() {
   for (const key of Object.keys(args)) if (!['sha', 'archive', 'manifest', 'repo', 'rollback-ref', 'evidence', 'keep', 'ego-space', 'install-budget-mib', 'build-budget-mib'].includes(key)) throw new Error('Unknown argument: --' + key);
   const result = await checkReleasePackage(args);
   console.log(JSON.stringify({status: result.status, sourceSha: result.sourceSha, archiveSha256: result.archiveSha256, keptCheckout: result.kept ? result.checkout : null, phases: result.phases.map(phase => ({name: phase.name, status: phase.status}))}, null, 2));
+  if(result.status!=='passed')process.exitCode=1;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) main().catch(error => { console.error(error.message); process.exitCode = 1; });
