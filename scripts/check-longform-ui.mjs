@@ -10,9 +10,10 @@ const root=fileURLToPath(new URL('..',import.meta.url));
 const port=14437,origin='http://localhost:'+port;
 const field=name=>'[data-lf-field="'+name+'"]';
 const action=(name,extra='')=>'[data-lf-action="'+name+'"]'+extra;
-export async function checkLongformUI(task,output){
+export async function checkLongformUI(task,output,source={}){
+  const packageSha=source.packageSha||process.env.STUDIO_PACKAGE_SHA;
   const page=task.page('p1');await fs.mkdir(output,{recursive:true});
-  const run={runId:Date.now().toString(36),sha:process.env.STUDIO_PACKAGE_SHA||execFileSync('git',['rev-parse','HEAD'],{cwd:root,encoding:'utf8'}).trim(),sourceKind:process.env.STUDIO_PACKAGE_SHA?'release_archive':'git_checkout',workingTreeDirty:process.env.STUDIO_PACKAGE_SHA?null:Boolean(execFileSync('git',['status','--porcelain'],{cwd:root,encoding:'utf8'}).trim()),startedAt:new Date().toISOString(),status:'running'};await fs.writeFile(path.join(output,'results.json'),JSON.stringify(run,null,2));
+  const run={runId:Date.now().toString(36),sha:packageSha||execFileSync('git',['rev-parse','HEAD'],{cwd:root,encoding:'utf8'}).trim(),sourceKind:packageSha?'release_archive':'git_checkout',workingTreeDirty:packageSha?null:Boolean(execFileSync('git',['status','--porcelain'],{cwd:root,encoding:'utf8'}).trim()),startedAt:new Date().toISOString(),status:'running'};await fs.writeFile(path.join(output,'results.json'),JSON.stringify(run,null,2));
   const results=[];const passed=name=>{results.push(name);console.log('PASS '+name);};
   const tab=async name=>{await page.click(action('tab','[data-tab="'+name+'"]'));await page.waitForSelector(action('tab','[data-tab="'+name+'"][aria-current="step"]'));};
   const save=async()=>{await page.click('.lf-savebar '+action('save'));await page.waitForFunction(()=>document.querySelector('[data-lf-save-state]')?.textContent==='已保存在本机');};
@@ -74,7 +75,7 @@ export async function checkLongformUI(task,output){
   const backupPromise=page.waitForEvent('download');await page.click(action('backup-edits'));await (await backupPromise).saveAs(path.join(output,'conflict-edits.json'));await page.click(action('compare-server'));await page.waitForFunction(()=>document.querySelector('[data-lf-comparison]')?.textContent.includes('窗口B已保存的新版本'));await page.screenshot({path:path.join(output,'conflict-desktop.png'),fullPage:true});await other.close();passed('两个实际页面409冲突保留输入，可下载副本与比较新版');
   await page.goto(origin);await page.click('[data-action="new"] >> nth=0');await page.fill('#new-topic','合成验收：创业日志');await page.selectOption('#new-kind','article');await page.click('#create-project');await page.waitForSelector('[data-lf-source-note]');await tab('article');await page.click(action('story-type','[data-value="diary"]'));await page.fill(field('article-bodyMd'),'今天只记录一次选择。这是合成验收，不是用户真实裸辞经历。');await save();await page.click('.lf-task summary');await page.click(action('prepare-task','[data-kind="article"]'));await page.waitForFunction(()=>document.querySelector('[data-lf-task-output="article"]')?.value.includes('Viral Writer'));
   assert.match(await page.evaluate(()=>document.querySelector('[data-lf-task-output="article"]').value),/Humanizer-zh/);await page.click(action('article-preview'));await page.waitForSelector('[data-lf-article-frame]');await page.click('[data-lf-article-ack]');await page.click(action('article-approve'));await page.waitForFunction(()=>document.querySelector('[data-lf-article-badge]')?.textContent==='本版长文已审核');await page.reload();await page.waitForSelector('[data-lf-source-note]');p=await get();assert.equal(p.article.storyType,'diary');assert.equal(p.tasks.length,0);assert.equal(p.runtime.articleApproved,true);passed('创业日志技能路由、独立审核、重载无重复任务');
-  await checkCardsUI(task,path.join(output,'cards'),origin);passed('旧短图卡全链路与430真图导出回归');
+  await checkCardsUI(task,path.join(output,'cards'),origin,{packageSha});passed('旧短图卡全链路与430真图导出回归');
   const result={...run,status:'pass',finishedAt:new Date().toISOString(),passed:results.length,browser:'ego-lite',syntheticOnly:true,remoteWrites:0,formalPublishing:0,results};await fs.writeFile(path.join(output,'results.json'),JSON.stringify(result,null,2));console.log(JSON.stringify(result));
 }
 if(process.argv[1]===fileURLToPath(import.meta.url)){
@@ -82,7 +83,7 @@ if(process.argv[1]===fileURLToPath(import.meta.url)){
   const env={...process.env,STUDIO_PORT:String(port),STUDIO_DATA_DIR:directory};delete env.STUDIO_DRAFT_DRIVER;
   const server=spawn(process.execPath,[path.join(root,'server.mjs')],{cwd:root,env,stdio:['ignore','pipe','pipe']});
   try{await new Promise((resolve,reject)=>{server.stdout.once('data',resolve);server.once('error',reject);server.once('exit',()=>reject(Error('隔离服务未启动')));});
-    const space=process.env.STUDIO_EGO_SPACE,code=`const task=await taskSpace(${space?Number(space):JSON.stringify('小苋 · 长文验收')});console.log({spaceId:task.spaceId});const {checkLongformUI}=await import(${JSON.stringify(fileURLToPath(import.meta.url))});await checkLongformUI(task,${JSON.stringify(output)});${space?'':'await task.finish({keep:[]});'}`;
+    const space=process.env.STUDIO_EGO_SPACE,code=`const task=await taskSpace(${space?Number(space):JSON.stringify('小苋 · 长文验收')});console.log({spaceId:task.spaceId});const {checkLongformUI}=await import(${JSON.stringify(fileURLToPath(import.meta.url))});await checkLongformUI(task,${JSON.stringify(output)},${JSON.stringify({packageSha:process.env.STUDIO_PACKAGE_SHA||null})});${space?'':'await task.finish({keep:[]});'}`;
     const child=spawn('ego-browser',['nodejs','-e',code],{stdio:'inherit'});await new Promise((resolve,reject)=>{child.once('error',reject);child.once('exit',code=>code===0?resolve():reject(Error('长文Ego验收未通过')));});
   }catch(error){let result={};try{result=JSON.parse(await fs.readFile(path.join(output,'results.json'),'utf8'));}catch{}await fs.mkdir(output,{recursive:true});await fs.writeFile(path.join(output,'results.json'),JSON.stringify({...result,status:'fail',finishedAt:new Date().toISOString(),error:error.message},null,2));throw error;}finally{server.kill('SIGINT');await new Promise(r=>server.once('exit',r));await fs.rm(directory,{recursive:true,force:true});}
 }

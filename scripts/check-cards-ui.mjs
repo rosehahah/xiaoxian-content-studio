@@ -16,7 +16,8 @@ const root=fileURLToPath(new URL('..',import.meta.url));
  *   await checkCardsUI(task, output, 'http://localhost:14437');
  * Every approval and download belongs to synthetic data, never real user content.
  */
-export async function checkCardsUI(task,output,origin) {
+export async function checkCardsUI(task,output,origin,source={}) {
+  const packageSha=source.packageSha||process.env.STUDIO_PACKAGE_SHA;
   const address=new URL(origin);
   assert.ok(['http:','https:'].includes(address.protocol),'需要本机 HTTP 地址');
   assert.ok(['localhost','127.0.0.1','[::1]','::1'].includes(address.hostname),'图卡验收只允许本机服务');
@@ -38,8 +39,8 @@ export async function checkCardsUI(task,output,origin) {
     // Capture the starting surface before local fixture setup or any UI operation.
     await snapshot('cards-initial-snapshot.txt');
     initialViewport=await page.evaluate(()=>({width:innerWidth,height:innerHeight,deviceScaleFactor:devicePixelRatio || 1}));
-    run.sha=process.env.STUDIO_PACKAGE_SHA||execFileSync('git',['rev-parse','HEAD'],{cwd:root,encoding:'utf8'}).trim();run.sourceKind=process.env.STUDIO_PACKAGE_SHA?'release_archive':'git_checkout';
-    run.workingTreeDirty=process.env.STUDIO_PACKAGE_SHA?null:Boolean(execFileSync('git',['status','--porcelain'],{cwd:root,encoding:'utf8'}).trim());
+    run.sha=packageSha||execFileSync('git',['rev-parse','HEAD'],{cwd:root,encoding:'utf8'}).trim();run.sourceKind=packageSha?'release_archive':'git_checkout';
+    run.workingTreeDirty=packageSha?null:Boolean(execFileSync('git',['status','--porcelain'],{cwd:root,encoding:'utf8'}).trim());
     await fs.writeFile(resultPath,JSON.stringify(run,null,2));
 
     stage='synthetic_setup';
