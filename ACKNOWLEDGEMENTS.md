@@ -17,6 +17,17 @@
 
 具体的采用与舍弃记录在 [research/创作方法研究.md](research/创作方法研究.md)，并保留了研究时的 GitHub API 快照。
 
+## 海外内容适配与草稿方法
+
+以下项目帮助我们理解长文草稿与跨平台改写的职责。本项目独立实现相应适配器，没有安装、捆绑或复制这些 Skill 的模板、脚本与素材；这些作者是方法来源，不据此声明他们提交了本仓库代码。
+
+| 项目与作者 | 本项目学习的部分 | 上游许可证 / 使用边界 |
+| --- | --- | --- |
+| [publish-substack-article](https://github.com/sugarforever/01coder-agent-skills/tree/main/skills/publish-substack-article) · [@sugarforever](https://github.com/sugarforever) | 长文保留排版、确认自动保存、停在草稿供用户发布 | MIT；独立改为本项目 Ego Lite 流程，未采用上游 Playwright、Chrome DevTools、剪贴板或渲染脚本 |
+| [content-repurposer-sms](https://github.com/blacktwist/social-media-skills/tree/main/skills/content-repurposer-sms) · [BlackTwist](https://github.com/blacktwist) | 保持作者口吻和事实，按平台阅读场景重新表达 | MIT；仅独立总结适配方法，未连接其排期/发布服务，未照搬固定模板或流量判断 |
+
+平台行为同时依据官方文档核验，来源和具体取舍见 [海外草稿说明](.agents/skills/xiaoxian-platform-copy/references/overseas-drafts.md)。
+
 ## 产品与界面方法
 
 - [frontend-design](https://github.com/anthropics/skills/tree/main/skills/frontend-design) by [Anthropic](https://github.com/anthropics)，Apache-2.0。用于建立清晰的视觉方向和前端完成度标准。

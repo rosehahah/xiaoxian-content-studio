@@ -10,9 +10,12 @@ import os from 'node:os';
 import {fileURLToPath} from 'node:url';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
-import {randomUUID} from 'node:crypto';
-import {seedProject,validateProject,validateContent,contentKey,cardKey,contentApproved,cardsApproved,invalidateContent,invalidateVisual,validatePlatform,fingerprint} from './model.mjs';
+import {randomUUID,createHash} from 'node:crypto';
+import {seedProject,validateProject,normalizePlatforms,PLATFORMS,OVERSEAS_PLATFORMS,platformCopyKey,validateContent,contentKey,cardKey,contentApproved,cardsApproved,invalidateContent,invalidateVisual,validatePlatform,fingerprint} from './model.mjs';
 import {runCreatorDraft,prepareCreatorSession,draftAutomationAvailable} from './draft-automation.mjs';
+import {getXConfiguration,probeXConnection,createXArticleDraft} from './overseas-publishing.mjs';
+import {loadOverseasConfig,saveSubstackUrl} from './overseas-config.mjs';
+import {overseasInputKey,overseasTask,importOverseasCopies} from './overseas-content.mjs';
 const run=promisify(execFile),root=path.dirname(fileURLToPath(import.meta.url));
 const local=process.env.STUDIO_DATA_DIR||path.join(root,'.local-data'),dist=path.join(root,'dist');
 const port=Number(process.env.STUDIO_PORT||4318),origin='http://localhost:'+port;
@@ -24,11 +27,15 @@ const jobsDir=path.join(local,'draft-jobs');
 await fs.mkdir(jobsDir,{recursive:true});
 let projects;
 try{projects=JSON.parse(await fs.readFile(db,'utf8'));}catch(e){if(e.code!=='ENOENT')throw e;projects=[seedProject()];}
+for(const p of projects){normalizePlatforms(p);for(const key of OVERSEAS_PLATFORMS){const d=p.platforms[key].delivery;if(d?.outcome==='unknown'&&!['draft','manual','queued_local'].includes(d.status))Object.assign(d,{status:'uncertain',message:'上次草稿任务中断，结果未知。请先在平台核对，再记录手动完成，避免重复创建。'});}}
 const busy=new Set();
 const jobs=new Map();
 const sessionChecks=new Map();
 let wechatConnection={status:'unchecked',message:'本机配置尚未经过联网检查'};
-const platformSessions={xiaohongshu:{status:'unchecked'},douyin:{status:'unchecked'}};
+const platformSessions={xiaohongshu:{status:'unchecked'},douyin:{status:'unchecked'},substack:{status:'unchecked'}};
+let xConnection={status:'unchecked',configured:false,articleAccess:'unverified',message:'请先检查 X 授权连接'};
+let xConfigKey=null;
+let substackConfigWrites=Promise.resolve();
 let persistence=Promise.resolve();
 function persist(){const snapshot=JSON.stringify(projects,null,2);persistence=persistence.catch(()=>{}).then(async()=>{await fs.writeFile(db+'.tmp',snapshot);await fs.rename(db+'.tmp',db);});return persistence;}
 await persist();
@@ -114,15 +121,93 @@ async function creatorDraft(p,body){
   }).catch(async error=>{if(/登录状态已失效|安全验证/.test(error.message))platformSessions[job.platform]={status:'unchecked',message:error.message};await updateJob(job,'error',job.status==='error'?job.message:error.message||'自动填写未完成');copy.delivery={...copy.delivery,status:'error',message:job.message,updatedAt:job.updatedAt};stamp(p);await persist();}).finally(()=>busy.delete(p.id));
   return publicJob(job);
 }
+async function overseasConnections(){
+  const threads={status:'local',message:'仅保存本机待发布稿，不写入 Threads 远程草稿箱'};
+  try{
+    const config=await loadOverseasConfig(local),x=getXConfiguration(config.env),key=fingerprint(config.env);
+    if(key!==xConfigKey){xConfigKey=key;xConnection={...x,platform:'x',status:x.configured?'unchecked':'unconfigured',articleAccess:'unverified',message:x.configured?'令牌已配置，请检查 X 授权连接':'请在本机 overseas-config.json 或环境变量中配置 X 用户访问令牌'};}
+    return {x:xConnection,substack:{status:config.publicationUrl?'configured':'dashboard',publicationUrl:config.publicationUrl,message:config.publicationUrl?'将打开该刊物的写作后台':'可先检查 Substack 登录；写入前请填写刊物地址'},threads};
+  }catch(error){return {x:{status:'unavailable',configured:false,message:error.message},substack:{status:'unavailable',publicationUrl:'',message:error.message},threads};}
+}
+async function checkXConnection(){
+  const config=await loadOverseasConfig(local);xConfigKey=fingerprint(config.env);xConnection=await probeXConnection({env:config.env});return xConnection;
+}
+const overseasDeliveryKey=(p,key,destination='local')=>{const copy=p.platforms[key];return createHash('sha256').update(JSON.stringify({card:cardKey(p),copy:{title:copy.title,subtitle:copy.subtitle||'',body:copy.body,tags:copy.tags},language:p.overseasLanguage||'en',destination})).digest('hex');};
+async function overseasDraft(p,body){
+  const key=body.platform;
+  if(!OVERSEAS_PLATFORMS.includes(key))throw Error('不支持的海外平台');
+  if(busy.has(p.id))throw Error('正在准备草稿，请等待完成');
+  busy.add(p.id);let launched=false;
+  try{
+    if(!cardsApproved(p)||body.cardFingerprint!==cardKey(p))throw Error('请先审核当前版本图卡');
+    const check=validatePlatform(p,key);if(check.errors.length)throw Error(check.errors.join('；'));
+    const copy=p.platforms[key];
+    const unresolved=[copy.delivery,...(copy.history||[])].find(d=>d?.outcome==='unknown'&&!d.resolvedAt);
+    if(unresolved)throw Error('上次草稿结果未知，请先到平台核对并记录手动完成，避免重复创建');
+    const config=key==='threads'?null:await loadOverseasConfig(local);let destination='local';
+    if(key==='x'){
+      const connection=await checkXConnection();if(connection.status!=='connected')throw Error(connection.message);destination='x:'+connection.account.id;
+    }else if(key==='substack'){
+      if(!config.publicationUrl)throw Error('请先填写 Substack 刊物地址，避免写入其他出版物');destination=config.publicationUrl;
+      if(!await draftAutomationAvailable())throw Error('Ego Lite 不可用，请安装并连接 ego-browser；不会改用 Chrome。');
+      if(platformSessions.substack.status!=='logged_in')throw Error('请先检查并完成 Substack 登录');
+    }
+    const deliveryKey=overseasDeliveryKey(p,key,destination);
+    if(copy.delivery?.deliveryKey===deliveryKey&&['draft','queued_local','manual'].includes(copy.delivery.status))return {reused:true,project:p};
+    const at=new Date().toISOString(),snapshot={projectId:p.id,platform:key,destination,cardFingerprint:cardKey(p),deliveryKey,language:p.overseasLanguage||'en',title:copy.title,subtitle:copy.subtitle||'',body:copy.body,tags:[...copy.tags],createdAt:at};
+    if(key==='threads'){
+      const dir=path.join(local,'overseas-queue',p.id);await fs.mkdir(dir,{recursive:true});
+      const file=path.join(dir,deliveryKey+'.json');await fs.writeFile(file+'.tmp',JSON.stringify(snapshot,null,2));await fs.rename(file+'.tmp',file);
+      if(copy.delivery)copy.history=[...(copy.history||[]),copy.delivery];
+      copy.delivery={status:'queued_local',at,deliveryKey,cardFingerprint:cardKey(p),fingerprint:platformCopyKey(copy),by:'local',message:'已保存本机待发布稿，尚未写入 Threads 平台'};stamp(p);await persist();return {project:p,queued:true};
+    }
+    const job={id:randomUUID(),projectId:p.id,platform:key,status:'queued',message:'等待准备'+PLATFORMS[key].name+'草稿',createdAt:at,updatedAt:at,cardFingerprint:cardKey(p),copyFingerprint:platformCopyKey(copy)};
+    if(copy.delivery)copy.history=[...(copy.history||[]),copy.delivery];
+    // Persist before the first remote mutation. A crash must never trigger a blind retry.
+    copy.delivery={status:'opening',outcome:'unknown',jobId:job.id,at,deliveryKey,destination,cardFingerprint:cardKey(p),fingerprint:platformCopyKey(copy),by:key==='x'?'api':'automation'};
+    stamp(p);await persist();await saveJob(job);
+    const update=async(status,message,event={})=>{
+      if(key==='substack'&&event.draftUrl){let url;try{url=new URL(event.draftUrl);}catch{}if(url?.origin===destination&&/^\/publish\//.test(url.pathname)){copy.delivery.url=url.origin+url.pathname;job.draftUrl=copy.delivery.url;}}
+      if(key==='substack'&&['created','unknown','not-created'].includes(event.outcome))copy.delivery.outcome=event.outcome;
+      if(key==='substack'&&status==='needs_attention'&&/登录|验证/.test(message))platformSessions.substack={status:'unchecked',message};
+      copy.delivery={...copy.delivery,status,message,updatedAt:new Date().toISOString()};await updateJob(job,status,message);await persist();
+    };
+    launched=true;
+    Promise.resolve().then(async()=>{
+      if(key==='x'){
+        await update('filling','正在通过 X 官方 API 创建 Article 草稿');
+        const result=await createXArticleDraft({title:snapshot.title,markdown:snapshot.body},{env:config.env});
+        copy.delivery={...copy.delivery,draftId:result.id,verification:'api-accepted',outcome:'created'};
+        await update('draft','X API 已接受 Article 草稿并返回编号；请到 X Articles 核对排版后自行发布。');
+      }else{
+        await runCreatorDraft({platform:'substack',title:snapshot.title,subtitle:snapshot.subtitle,body:snapshot.body,tags:snapshot.tags,imageFiles:[],publicationUrl:config.publicationUrl,onUpdate:update});
+        if(!['draft','filled','needs_attention'].includes(job.status))await update('needs_attention','浏览器未返回可核对的草稿结果，请到 Substack 检查');
+        copy.delivery.outcome=job.status==='draft'?'created':copy.delivery.outcome==='not-created'?'not-created':'unknown';
+        if(copy.delivery.outcome==='unknown')copy.delivery.status='uncertain';
+        // A partially filled editor may already have autosaved; don't create it twice.
+        if(copy.delivery.outcome==='unknown')await updateJob(job,'uncertain',copy.delivery.message+'；请先人工核对，避免重复创建。');
+      }
+      stamp(p);await persist();
+    }).catch(async error=>{
+      const uncertain=error.outcome==='unknown'||key==='substack';
+      if(key==='x'&&error.code==='x_unauthorized')xConnection={...xConnection,status:'unavailable',message:error.message};
+      if(key==='substack'&&/登录|验证/.test(error.message))platformSessions.substack={status:'unchecked',message:error.message};
+      copy.delivery={...copy.delivery,status:uncertain?'uncertain':'error',outcome:uncertain?'unknown':'not-created',message:error.message,updatedAt:new Date().toISOString()};
+      await updateJob(job,copy.delivery.status,error.message);stamp(p);await persist();
+    }).finally(()=>busy.delete(p.id));
+    return {project:p,job:publicJob(job)};
+  }finally{if(!launched)busy.delete(p.id);}
+}
 async function checkPlatformSession(platform){
-  if(!['xiaohongshu','douyin'].includes(platform))throw new Error('不支持的平台');
+  if(!['xiaohongshu','douyin','substack'].includes(platform))throw new Error('不支持的平台');
   if(sessionChecks.has(platform))return publicJob(await sessionChecks.get(platform));
   const start=(async()=>{
     if(!await draftAutomationAvailable())throw new Error('Ego Lite 不可用，请安装并连接 ego-browser；不会改用 Chrome。');
     const previous=platformSessions[platform],spaceId=['waiting_login','needs_attention'].includes(previous.status)?previous.spaceId:null;
+    const config=platform==='substack'?await loadOverseasConfig(local):null;
     const job={id:randomUUID(),type:'session-check',platform,status:'queued',message:'等待检查登录状态',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};await saveJob(job);
     platformSessions[platform]={status:'opening',jobId:job.id,checkedAt:null};
-    prepareCreatorSession({platform,spaceId,onUpdate:async(status,message,event={})=>{job.spaceId=event.spaceId||job.spaceId;platformSessions[platform]={status,jobId:job.id,spaceId:job.spaceId,message,checkedAt:status==='logged_in'?new Date().toISOString():null};await updateJob(job,status,message);}}).catch(async error=>{await updateJob(job,'error',job.status==='error'?job.message:error.message||'登录状态检查未完成');platformSessions[platform]={status:'error',jobId:job.id,message:job.message,checkedAt:null};}).finally(()=>sessionChecks.delete(platform));
+    prepareCreatorSession({platform,spaceId,publicationUrl:config?.publicationUrl,onUpdate:async(status,message,event={})=>{job.spaceId=event.spaceId||job.spaceId;platformSessions[platform]={status,jobId:job.id,spaceId:job.spaceId,message,checkedAt:status==='logged_in'?new Date().toISOString():null};await updateJob(job,status,message);}}).catch(async error=>{await updateJob(job,'error',job.status==='error'?job.message:error.message||'登录状态检查未完成');platformSessions[platform]={status:'error',jobId:job.id,message:job.message,checkedAt:null};}).finally(()=>sessionChecks.delete(platform));
     return job;
   })();
   sessionChecks.set(platform,start);
@@ -137,15 +222,23 @@ const server=http.createServer(async(req,res)=>{
       if(req.method!=='GET' && !String(req.headers['content-type']).startsWith('application/json')){json(res,415,{error:'仅接受 JSON 请求'});return;}
       if(route==='/api/health'){
         let available=false;try{const result=await run('md2wechat',['config','validate','--json'],{timeout:5000});const data=JSON.parse(result.stdout);available=data.success!==false;}catch{}
-        json(res,200,{mode:'local',wechat:available,draftAutomation:await draftAutomationAvailable(),browserDriver:'ego-lite',platformSessions,wechatConnection,storage:'本机保存',publishing:false});return;
+        json(res,200,{mode:'local',wechat:available,draftAutomation:await draftAutomationAvailable(),browserDriver:'ego-lite',platformSessions,wechatConnection,overseasConnections:await overseasConnections(),storage:'本机保存',publishing:false});return;
       }
       if(route==='/api/wechat/check'&&req.method==='POST'){json(res,200,{connection:await checkWechatConnection()});return;}
+      if(route==='/api/overseas-connections/x/check'&&req.method==='POST'){json(res,200,{connection:await checkXConnection()});return;}
+      if(route==='/api/overseas-connections/substack/config'&&req.method==='POST'){
+        const input=await readBody(req);
+        if(typeof input.publicationUrl!=='string')throw Error('请填写 Substack 刊物地址');
+        if(sessionChecks.has('substack')||projects.some(p=>p.platforms.substack.delivery?.outcome==='unknown'&&busy.has(p.id)))throw Error('Substack 任务进行中，请等待结束后再修改地址');
+        substackConfigWrites=substackConfigWrites.catch(()=>{}).then(()=>saveSubstackUrl(local,input.publicationUrl));await substackConfigWrites;
+        platformSessions.substack={status:'unchecked'};json(res,200,{connection:(await overseasConnections()).substack});return;
+      }
       if(route==='/api/account-preferences'){
         if(req.method==='GET'){json(res,200,{preferences:accountPreferences});return;}
         if(req.method==='PUT'){const body=validatePreferences(await readBody(req));if(body.revision!==accountPreferences.revision){json(res,409,{error:'账号偏好已在另一处修改，请刷新后继续'});return;}const next={...body,revision:body.revision+1};accountPreferences=next;preferenceWrites=preferenceWrites.catch(()=>{}).then(async()=>{await fs.writeFile(prefsFile+'.tmp',JSON.stringify(next,null,2));await fs.rename(prefsFile+'.tmp',prefsFile);});await preferenceWrites;json(res,200,{preferences:next});return;}
         json(res,405,{error:'不支持此操作'});return;
       }
-      const sm=route.match(/^\/api\/platform-sessions\/(xiaohongshu|douyin)\/check$/);
+      const sm=route.match(/^\/api\/platform-sessions\/(xiaohongshu|douyin|substack)\/check$/);
       if(sm&&req.method==='POST'){json(res,202,{job:await checkPlatformSession(sm[1])});return;}
       const jm=route.match(/^\/api\/draft-jobs\/([a-f0-9-]{36})$/);
       if(jm&&req.method==='GET'){let job=jobs.get(jm[1]);if(!job){try{job=JSON.parse(await fs.readFile(path.join(jobsDir,jm[1]+'.json'),'utf8'));}catch{}}if(!job){json(res,404,{error:'草稿任务不存在'});return;}json(res,200,{job:publicJob(job)});return;}
@@ -156,9 +249,10 @@ const server=http.createServer(async(req,res)=>{
         for(const copy of Object.values(p.platforms)){copy.delivery=null;copy.history=[];}
         projects.unshift(p);await persist();json(res,201,{project:p});return;
       }
-      const m=route.match(/^\/api\/projects\/([a-zA-Z0-9_-]{1,80})(?:\/(planning-input|planning-import|planning-select|creative-input|cover-import|cover-select|content-approve|cards-approve|draft|wechat-verify|wechat-package|draft-job|manual-draft))?$/);
+      const m=route.match(/^\/api\/projects\/([a-zA-Z0-9_-]{1,80})(?:\/(planning-input|planning-import|planning-select|creative-input|cover-import|cover-select|content-approve|cards-approve|draft|wechat-verify|wechat-package|draft-job|manual-draft|overseas-input|overseas-import|overseas-draft))?$/);
       if(!m){json(res,404,{error:'接口不存在'});return;}
       const p=projects.find(x=>x.id===m[1]);if(!p){json(res,404,{error:'项目不存在'});return;}
+      if(req.method==='GET'&&m[2]==='overseas-input'){json(res,200,{revision:p.revision,inputFingerprint:overseasInputKey(p),language:p.overseasLanguage||'en',prompt:overseasTask(p,origin),importEndpoint:origin+'/api/projects/'+p.id+'/overseas-import'});return;}
       if(req.method==='GET'&&m[2]==='planning-input'){const plan=planningOf(p,accountPreferences);json(res,200,{planning:plan,inputFingerprint:planningInputKey(plan),revision:p.revision,prompt:planningTask(p,accountPreferences,origin),importEndpoint:origin+'/api/projects/'+p.id+'/planning-import'});return;}
       if(req.method==='GET'&&m[2]==='creative-input'){
         const errors=creationErrors(p);if(errors.length)throw new Error(errors.join('；'));
@@ -178,6 +272,7 @@ const server=http.createServer(async(req,res)=>{
       if(busy.has(p.id)){json(res,409,{error:'正在填写草稿，请等待完成后再编辑'});return;}
       const body=await readBody(req);requireRevision(p,body);
       if(req.method==='POST'&&m[2]==='planning-import'){importPlans(p,body,accountPreferences,randomUUID);stamp(p);await persist();json(res,200,{project:p});return;}
+      if(req.method==='POST'&&m[2]==='overseas-import'){importOverseasCopies(p,body);stamp(p);await persist();json(res,200,{project:p});return;}
       if(req.method==='POST'&&m[2]==='planning-select'){applyPlan(p,body.candidateId);invalidateContent(p);stamp(p);await persist();json(res,200,{project:p});return;}
       if(req.method==='POST'&&m[2]==='cover-import'){
         if(creationErrors(p).length)throw new Error(creationErrors(p).join('；'));
@@ -196,10 +291,11 @@ const server=http.createServer(async(req,res)=>{
         const next=validateProject(body);const contentChanged=contentKey(p)!==contentKey(next),visualChanged=cardKey(p)!==cardKey(next);
         if(next.planning!==undefined)p.planning=next.planning;
         p.content=next.content;p.visual=next.visual;p.reviewNote=String(next.reviewNote||'').slice(0,3000);
-        for(const k of ['wechat','xiaohongshu','douyin']){
+        const languageChanged=(p.overseasLanguage||'en')!==(next.overseasLanguage||'en');p.overseasLanguage=next.overseasLanguage||'en';
+        for(const k of Object.keys(PLATFORMS)){
           const old=p.platforms[k],copy=next.platforms[k];
-          if(fingerprint({title:old.title,body:old.body,tags:old.tags})!==fingerprint({title:copy.title,body:copy.body,tags:copy.tags})&&old.delivery){old.history=old.history||[];old.history.push(old.delivery);old.delivery=null;}
-          old.title=copy.title;old.body=copy.body;old.tags=copy.tags;
+          if((platformCopyKey(old)!==platformCopyKey(copy)||(languageChanged&&OVERSEAS_PLATFORMS.includes(k)))&&old.delivery){old.history=old.history||[];old.history.push(old.delivery);old.delivery=null;}
+          old.title=copy.title;old.body=copy.body;old.tags=copy.tags;if(k==='substack')old.subtitle=copy.subtitle||'';
         }
         if(contentChanged)invalidateContent(p);else if(visualChanged)invalidateVisual(p);
         stamp(p);await persist();json(res,200,{project:p});return;
@@ -217,10 +313,15 @@ const server=http.createServer(async(req,res)=>{
         busy.add(p.id);try{await wechatDraft(p,body,m[2]==='wechat-verify');json(res,200,{project:p});}finally{busy.delete(p.id);}return;
       }else if(m[2]==='draft-job'){
         const job=await creatorDraft(p,body);json(res,202,{job,project:p});return;
+      }else if(m[2]==='overseas-draft'){
+        const result=await overseasDraft(p,body);json(res,result.job?202:200,result);return;
       }else if(m[2]==='manual-draft'){
-        if(!cardsApproved(p)||!['xiaohongshu','douyin'].includes(body.platform))throw new Error('请先完成图卡审核');
+        if(!cardsApproved(p)||!['xiaohongshu','douyin','substack','x'].includes(body.platform))throw new Error('请先完成图卡审核');
         const check=validatePlatform(p,body.platform);if(check.errors.length)throw new Error(check.errors.join('；'));
-        const copy=p.platforms[body.platform];copy.delivery={status:'manual',at:new Date().toISOString(),cardFingerprint:cardKey(p),fingerprint:fingerprint(copy),by:'user'};
+        const copy=p.platforms[body.platform],at=new Date().toISOString();
+        if(OVERSEAS_PLATFORMS.includes(body.platform)){for(const d of [copy.delivery,...(copy.history||[])])if(d?.outcome==='unknown')d.resolvedAt=at;if(copy.delivery)copy.history=[...(copy.history||[]),copy.delivery];}
+        const destination=body.platform==='substack'?(await loadOverseasConfig(local)).publicationUrl:body.platform==='x'&&xConnection.status==='connected'?'x:'+xConnection.account.id:null;
+        copy.delivery={status:'manual',at,cardFingerprint:cardKey(p),fingerprint:platformCopyKey(copy),...(destination?{deliveryKey:overseasDeliveryKey(p,body.platform,destination),destination}:{}),by:'user'};
       }else{json(res,404,{error:'没有发布接口'});return;}
       stamp(p);await persist();json(res,200,{project:p});return;
     }

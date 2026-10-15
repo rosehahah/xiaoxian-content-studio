@@ -10,12 +10,13 @@
     "test:cover-ui": "node scripts/check-cover-ui.mjs",
     "test:topics-ui": "node scripts/check-topics-ui.mjs",
     "test:draft-ui": "node scripts/check-ego-draft-ui.mjs",
+    "test:overseas-ui": "node scripts/check-overseas-draft-ui.mjs",
     "prestart": "npm run build"
   },
   "keywords": [],
   "author": "小苋AI圈 (https://github.com/rosehahah)",
   "license": "Apache-2.0",
-  "description": "面向微信公众号、小红书和抖音的本机内容创作、图卡审核与草稿工作台",
+  "description": "面向公众号、小红书、抖音、Substack、X Articles 和 Threads 的本机内容创作、审核与草稿工作台",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/rosehahah/xiaoxian-content-studio.git"

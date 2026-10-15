@@ -26,6 +26,7 @@ dist/icon-library.mjs
 dist/vendor.js
 dist/model.mjs
 dist/planning.mjs
+dist/overseas-content.mjs
 dist/creative.mjs
 dist/cover-library.mjs
 dist/licenses/

@@ -6,7 +6,7 @@
 [![GitHub stars](https://img.shields.io/github/stars/rosehahah/xiaoxian-content-studio?style=flat-square&color=EA3F10)](https://github.com/rosehahah/xiaoxian-content-studio/stargazers)
 [![All Contributors](https://img.shields.io/badge/all_contributors-9-EA3F10.svg?style=flat-square)](#contributors-)
 
-一个给个人创作者使用的本机内容工作台：灵感来了先记下来，一次整理成内容和图卡，再分别写入微信公众号、小红书和抖音草稿。最后检查和正式发布，仍然由你自己完成。
+一个给个人创作者使用的本机内容工作台：灵感来了先记下来，一次整理成内容和图卡，再适配微信公众号、小红书、抖音与海外长文渠道，保存到平台草稿或本机待发布队列。最后检查和正式发布，仍然由你自己完成。
 
 ![小苋内容工作台](preview-workspace.jpg)
 
@@ -39,7 +39,7 @@ flowchart LR
 - 一套审核后的图卡可以继续用于三端，不再反复导出、找图和上传。
 - 自动适配不同平台的标题、正文字数和话题数量。
 - 登录状态提前检查，准备好后再自动填写创作中心。
-- 所有内容先进入草稿箱，保留最后一次人工检查。
+- 交付停在平台草稿或本机待发布稿，保留最后一次人工检查。
 
 它适合同时经营多个内容平台的个人博主、个人 IP 和小团队，尤其适合“点子很多，但容易卡在整理与发布流程”的创作者。
 
@@ -52,6 +52,8 @@ flowchart LR
 - Lucide 与 Tabler 共 8,104 个本机 SVG 素材，支持中文同义词搜索。
 - 微信公众号草稿接口，以及小红书、抖音的本机浏览器草稿自动化。
 - 小红书和抖音先校验 Ego Lite 登录状态，再开放自动填写。
+- Substack 的 Ego Lite 文章草稿、X Articles 官方 API 草稿，以及 Threads 本机待发布队列。
+- 海外版本支持英文、中文或中英双语；保留作者口吻与原稿事实，分别适配阅读场景。
 - 只填写草稿；代码没有正式发布端点，浏览器脚本不点击“发布”。
 
 
@@ -106,6 +108,7 @@ npm start
 - `projects.json`：项目内容与审核记录
 - 登录会话由本机 Ego Lite 管理；旧 `browser-profiles/` 保留但不再读取或迁移
 - `draft-jobs/`：草稿任务状态
+- `overseas-config.json`（可选，权限600）：本机海外渠道配置，不随内容导出
 
 `npm start` 会先构建所需资源。大型图标数据、依赖包和复制的运行模块由 `npm run build` 生成，不再提交到 Git；应用源文件仍保存在 `dist/`，请勿整目录删除。双击启动脚本也只拉起 Ego Lite。
 
@@ -125,9 +128,43 @@ npm start
 
 - **微信公众号**：调用现有本机草稿接口，只创建和读回草稿。
 - **小红书 / 抖音**：使用 Ego Lite 的任务页面，上传审核图片并填写标题、正文和话题。会话失效、验证码或页面结构变化时停止并交给用户。
+- **Substack**：使用 Ego Lite 写入文章，核对自动保存和实际内容；需要登录及自己的 publication。只停在编辑草稿。
+- **X Articles**：使用官方 API 创建文章草稿，保存平台返回编号；当前版本只写文字，图片可从原项目另行导出，在 X 补入。
+- **Threads**：只保存本机待发布文案和审核版本指纹；没有额外保存图片、写入 Threads 远程草稿或调用发布 API。
 - **所有平台**：没有自动发布功能。
 
 平台页面会变化，浏览器自动化应视为可维护的适配器，而不是平台官方 API。使用者需要遵守对应平台条款。使用 Ego Lite 不意味着平台允许自动化，也不保证免于风控。驱动不可用时明确报错，没有 Chrome 或隐蔽自动化的兜底。
+
+## 海外内容怎么接进来
+
+在草稿页选择 Substack、X Articles 或 Threads，按本期选择英文、中文或中英双语。复制海外适配任务到 Codex，基于已经确认的内容整理三个版本，再导回工作台。网页负责保存、审核状态和交付，没有接入自动翻译或网页模型生成。标题、大小标题和段落按内容决定，不强制套用国内平台的短文格式。
+
+| 渠道 | 这版交付方式 | 完成状态代表什么 |
+| --- | --- | --- |
+| Substack | Ego Lite 填写文章并核对自动保存 | 已核对远程草稿；保存或话题未能核对时显示待处理 |
+| X Articles | `POST /2/articles/draft` | API 返回草稿编号；不代表已验收 X 渲染 |
+| Threads | 本机待发布队列 | 保存文稿及审核版本指纹，用户自行上传与发布 |
+
+海外交付当前只处理文字，不自动附加图卡；需要图片时可以从原项目另行导出，由用户在目标平台添加。
+
+Substack 可在工作台设置自己的 `https://名称.substack.com` publication URL，也可用本机环境变量 `STUDIO_SUBSTACK_URL`；环境变量优先且不能在网页覆盖。未设置时可以从通用后台检查登录，自动创建草稿前必须配置目标刊物地址。登录、验证码和安全验证由用户完成。Substack 官方文章草稿会自动保存，本项目核对保存后停在编辑页，不继续进入邮件发送或发布流程。[Substack 官方草稿说明](https://support.substack.com/hc/en-us/articles/360037831771-How-do-I-publish-a-new-post-on-Substack)
+
+X 在本机设置 `STUDIO_X_ACCESS_TOKEN`，或在 `.local-data/overseas-config.json` 中保存 `xAccessToken`；环境变量优先。令牌必须是用户授权的 OAuth 2.0 access token，并具有 `tweet.read`、`tweet.write` 和 `users.read` scopes。配置不会通过网页输入或返回；账户和 API 权限以平台响应为准。[X Articles 官方文档](https://docs.x.com/x-api/articles/introduction)
+
+私有配置文件示例（勿填入公开示例或提交 Git；文件权限设为600）：
+
+```json
+{
+  "substackPublicationUrl": "https://your-publication.substack.com",
+  "xAccessToken": "YOUR_USER_OAUTH_ACCESS_TOKEN"
+}
+```
+
+Threads 支持最长10,000字符的文字附件；这版只准备和保存待发布文字，没有附件上传或远程草稿连接。最多一个话题是当前适配器的校验范围，不要求每篇添加话题。[Meta 官方长文字说明](https://about.fb.com/news/2025/09/attach-text-threads-posts-share-longer-perspectives/)
+
+创作接力接口：`GET /api/projects/:id/overseas-input` 获取任务与输入指纹；`POST /api/projects/:id/overseas-import` 带 `revision`、`inputFingerprint` 和三平台 `platforms` 文案导入；`POST /api/projects/:id/overseas-draft` 带 `revision`、`platform` 和 `cardFingerprint` 创建草稿或本机待发布快照。文案导入不产生审核；交付继续使用用户确认的图卡版本。配置接口 `/api/overseas-connections/substack/config` 仅处理 publication URL，不接受平台密钥。
+
+海外规则和来源见 [平台 Skill](.agents/skills/xiaoxian-platform-copy/SKILL.md) 与 [海外草稿说明](.agents/skills/xiaoxian-platform-copy/references/overseas-drafts.md)。未安装或捆绑外部发布 Skill；参考项目的方法采用范围记录在[致谢](ACKNOWLEDGEMENTS.md)。
 
 ## 开发与验证
 
