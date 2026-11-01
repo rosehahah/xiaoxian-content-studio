@@ -25,7 +25,7 @@
     "url": "https://github.com/rosehahah/xiaoxian-content-studio/issues"
   },
   "dependencies": {
-    "@tabler/icons": "3.49.0",
+    "@tabler/icons": "3.50.0",
     "html-to-image": "^1.11.13",
     "jszip": "^3.10.2",
     "lucide-static": "1.52.0"
