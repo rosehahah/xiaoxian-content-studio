@@ -28,7 +28,7 @@
     "@tabler/icons": "3.49.0",
     "html-to-image": "^1.11.13",
     "jszip": "^3.10.2",
-    "lucide-static": "1.52.0"
+    "lucide-static": "1.64.0"
   },
   "devDependencies": {
     "esbuild": "^0.28.2"
